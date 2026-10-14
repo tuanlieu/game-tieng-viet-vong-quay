@@ -4,7 +4,21 @@ revoke execute on all functions in schema public from public,anon,authenticated;
 revoke execute on all functions in schema private from public,anon,authenticated;
 grant usage on schema private to authenticated;
 grant execute on function private.is_admin(),private.owns_set(uuid),private.can_read_room(uuid),private.require_user() to authenticated;
-do $$ declare t text;begin foreach t in array array['profiles','question_sets','questions','rooms','room_members','runs','submissions','wheels','prizes','spins','spin_tickets','themes','event_schedules','audit_logs','deletion_requests'] loop execute format('alter table public.%I enable row level security',t);end loop;end $$;
+alter table public.profiles enable row level security;
+alter table public.question_sets enable row level security;
+alter table public.questions enable row level security;
+alter table public.rooms enable row level security;
+alter table public.room_members enable row level security;
+alter table public.runs enable row level security;
+alter table public.submissions enable row level security;
+alter table public.wheels enable row level security;
+alter table public.prizes enable row level security;
+alter table public.spins enable row level security;
+alter table public.spin_tickets enable row level security;
+alter table public.themes enable row level security;
+alter table public.event_schedules enable row level security;
+alter table public.audit_logs enable row level security;
+alter table public.deletion_requests enable row level security;
 create policy profiles_select on public.profiles for select to authenticated using(id=auth.uid() or private.is_admin());
 create policy profiles_update on public.profiles for update to authenticated using(id=auth.uid()) with check(id=auth.uid());
 grant select on public.profiles to authenticated;grant update(display_name,avatar_url) on public.profiles to authenticated;
@@ -35,7 +49,13 @@ create policy schedules_owner on public.event_schedules for all to authenticated
 create policy audit_admin on public.audit_logs for select to authenticated using(private.is_admin() and auth.jwt()->>'aal'='aal2');grant select on public.audit_logs to authenticated;
 create policy deletion_own on public.deletion_requests for all to authenticated using(user_id=auth.uid()) with check(user_id=auth.uid());grant select,insert,delete on public.deletion_requests to authenticated;
 create function private.ready_write() returns trigger language plpgsql security definer set search_path='' as $$ begin perform private.require_user();return case when TG_OP='DELETE' then old else new end;end $$;
-do $$ declare t text;begin foreach t in array array['question_sets','questions','rooms','wheels','prizes','themes','event_schedules'] loop execute format('create trigger ready_write before insert or update or delete on public.%I for each row execute function private.ready_write()',t);end loop;end $$;
+create trigger ready_write_question_sets before insert or update or delete on public.question_sets for each row execute function private.ready_write();
+create trigger ready_write_questions before insert or update or delete on public.questions for each row execute function private.ready_write();
+create trigger ready_write_rooms before insert or update or delete on public.rooms for each row execute function private.ready_write();
+create trigger ready_write_wheels before insert or update or delete on public.wheels for each row execute function private.ready_write();
+create trigger ready_write_prizes before insert or update or delete on public.prizes for each row execute function private.ready_write();
+create trigger ready_write_themes before insert or update or delete on public.themes for each row execute function private.ready_write();
+create trigger ready_write_event_schedules before insert or update or delete on public.event_schedules for each row execute function private.ready_write();
 grant execute on function public.my_access(),public.server_time(),public.save_question(uuid,uuid,text,text[],text,text,integer,integer,text,text,text[],boolean),public.author_answers(uuid),public.join_room(text,text),public.control_run(uuid,text,uuid,integer),public.current_run(uuid),public.use_hint(uuid),public.submit_answer(uuid,text),public.spin_wheel(uuid,uuid),public.mark_delivered(uuid),public.active_theme(uuid),public.admin_users(),public.admin_set_role(uuid,text),public.grant_spins(uuid,uuid,uuid,integer) to authenticated;
 -- Service-only bootstrap and login lookup. Service credential never reaches browser.
 create function public.bootstrap_admin(p_user uuid,p_email text) returns void language plpgsql security definer set search_path='' as $$ begin
