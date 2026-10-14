@@ -4,7 +4,7 @@
 
 | Nhóm đặc tả | Đã viết | Kiểm chứng / phần còn thiếu |
 |---|---|---|
-| React/TypeScript/Vite + Supabase | Frontend, SQL migration, RPC, Edge login | Build/typecheck/lint đạt; chưa chạy Supabase thật |
+| React/TypeScript/Vite + Supabase | Frontend, SQL migration, RPC, Edge login | Build/typecheck/lint đạt; dự án Supabase thật đã tạo, migration/Edge function chưa áp dụng |
 | Màu, ô 3D, sidebar, sáng/tối | Bộ màu yêu cầu, ô chữ bóng mềm, sidebar thu gọn/drawer, reduced motion | Chưa QA bằng ảnh chụp ở 7 kích thước; không có file logo khả dụng |
 | Theme xu hướng 2026 | 2 bảng lấy cảm hứng, nguồn và ngày cập nhật | HEX thiết kế, không gắn nhãn mã chính thức |
 | Theme sự kiện Việt Nam | 11 bảng phối + Halloween; preview, custom, lưu theme, JSON export | Chưa có họa tiết/banner/ảnh/âm thanh; chưa nhập/restore theme và cảnh báo tương phản |
@@ -23,12 +23,11 @@
 | Bảo mật | RLS, private answers/roles, minimal grants, CSPRNG, transaction/idempotency, rate limit, CSP, CORS | Test SQL quyền và secret/dependency scan đạt; chưa pen test/staging, chưa log đầy đủ nội dung |
 | Media/Storage | Backup helper có đọc/ghi Storage | Chưa upload UI, MIME inspection, quota, media library |
 | Backup/restore | age encryption, manifest/checksum, app DB/Storage, staging guard, rollback docs, workflow backup opt-in repo private | Chỉ syntax và checksum tests; chưa pg_dump/age/restore thật; Auth/provider recovery không được chứng nhận |
-| GitHub/Deploy | Workflow CI, Pages gated, lockfile, docs | Chưa có repo game; chưa push, Actions, deploy hoặc smoke test URL |
+| GitHub/Deploy | Workflow CI, Pages gated, lockfile, docs | Repository đã tạo và push; chưa chạy Actions, deploy hoặc smoke test URL |
 
 ## Phụ thuộc bên ngoài đang thiếu
 
-- Repository mới dành riêng cho game (link do người dùng cung cấp).
-- Supabase staging/production, URL và publishable key; quyền thao tác dashboard/CLI ở môi trường tin cậy.
+- URL và publishable key của Supabase; quyền thao tác dashboard/CLI ở môi trường tin cậy.
 - Credentials Google/Facebook và SMTP chỉ cấu hình ở backend.
 - Logo cần cung cấp lại nếu muốn dùng; các đường dẫn ảnh ban đầu không tồn tại.
 - Công cụ browser QA được hỗ trợ, PostgreSQL CLI và age để chạy nghiệm thu/restore thật.
