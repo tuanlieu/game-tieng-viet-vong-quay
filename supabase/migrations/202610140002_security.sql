@@ -1,0 +1,54 @@
+-- RLS on every exposed table, minimal privileges, readiness gate on writes.
+revoke all on all tables in schema public from anon, authenticated;
+revoke execute on all functions in schema public from public,anon,authenticated;
+revoke execute on all functions in schema private from public,anon,authenticated;
+grant usage on schema private to authenticated;
+grant execute on function private.is_admin(),private.owns_set(uuid),private.can_read_room(uuid),private.require_user() to authenticated;
+do $$ declare t text;begin foreach t in array array['profiles','question_sets','questions','rooms','room_members','runs','submissions','wheels','prizes','spins','spin_tickets','themes','event_schedules','audit_logs','deletion_requests'] loop execute format('alter table public.%I enable row level security',t);end loop;end $$;
+create policy profiles_select on public.profiles for select to authenticated using(id=auth.uid() or private.is_admin());
+create policy profiles_update on public.profiles for update to authenticated using(id=auth.uid()) with check(id=auth.uid());
+grant select on public.profiles to authenticated;grant update(display_name,avatar_url) on public.profiles to authenticated;
+create policy sets_read on public.question_sets for select to authenticated using(owner_id=auth.uid() or visibility='public' or private.is_admin());
+create policy sets_write on public.question_sets for all to authenticated using(owner_id=auth.uid() or private.is_admin()) with check(owner_id=auth.uid() or private.is_admin());
+grant select,insert,update,delete on public.question_sets to authenticated;
+create policy questions_read on public.questions for select to authenticated using(private.owns_set(set_id));
+create policy questions_delete on public.questions for delete to authenticated using(private.owns_set(set_id));
+grant select,delete on public.questions to authenticated;
+create policy rooms_read on public.rooms for select to authenticated using(owner_id=auth.uid() or private.can_read_room(id));
+create policy rooms_insert on public.rooms for insert to authenticated with check(owner_id=auth.uid() and private.owns_set(set_id));
+alter table public.rooms add constraint room_theme_fk foreign key(theme_id) references public.themes(id);
+create policy rooms_update on public.rooms for update to authenticated using(owner_id=auth.uid()) with check(owner_id=auth.uid() and private.owns_set(set_id) and (theme_id is null or exists(select 1 from public.themes where id=theme_id and owner_id=auth.uid())));
+grant select,insert on public.rooms to authenticated;grant update(title,status,locked,max_members,theme_id) on public.rooms to authenticated;
+create policy members_read on public.room_members for select to authenticated using(private.can_read_room(room_id));
+create policy members_remove on public.room_members for delete to authenticated using(exists(select 1 from public.rooms where id=room_id and owner_id=auth.uid()));
+grant select,delete on public.room_members to authenticated;
+create policy runs_read on public.runs for select to authenticated using(private.can_read_room(room_id));grant select on public.runs to authenticated;
+create policy submissions_read on public.submissions for select to authenticated using(private.can_read_room((select room_id from public.runs where id=run_id)));grant select on public.submissions to authenticated;
+create policy wheels_ticket_read on public.wheels for select to authenticated using(exists(select 1 from public.spin_tickets where wheel_id=id and user_id=auth.uid()));
+create policy wheels_owner on public.wheels for all to authenticated using(owner_id=auth.uid()) with check(owner_id=auth.uid());grant select,insert,update,delete on public.wheels to authenticated;
+create policy prizes_ticket_read on public.prizes for select to authenticated using(exists(select 1 from public.spin_tickets where wheel_id=public.prizes.wheel_id and user_id=auth.uid()));
+create policy prizes_owner on public.prizes for all to authenticated using(exists(select 1 from public.wheels where id=wheel_id and owner_id=auth.uid())) with check(exists(select 1 from public.wheels where id=wheel_id and owner_id=auth.uid()));grant select,insert,update,delete on public.prizes to authenticated;
+create policy tickets_read on public.spin_tickets for select to authenticated using(user_id=auth.uid());grant select on public.spin_tickets to authenticated;
+create policy spins_read on public.spins for select to authenticated using(user_id=auth.uid() or exists(select 1 from public.wheels where id=wheel_id and owner_id=auth.uid()));grant select on public.spins to authenticated;
+create policy themes_owner on public.themes for all to authenticated using(owner_id=auth.uid()) with check(owner_id=auth.uid());grant select,insert,update,delete on public.themes to authenticated;
+create policy schedules_owner on public.event_schedules for all to authenticated using(owner_id=auth.uid()) with check(owner_id=auth.uid() and exists(select 1 from public.themes where id=theme_id and owner_id=auth.uid()) and (room_id is null or exists(select 1 from public.rooms where id=room_id and owner_id=auth.uid())));grant select,insert,update,delete on public.event_schedules to authenticated;
+create policy audit_admin on public.audit_logs for select to authenticated using(private.is_admin() and auth.jwt()->>'aal'='aal2');grant select on public.audit_logs to authenticated;
+create policy deletion_own on public.deletion_requests for all to authenticated using(user_id=auth.uid()) with check(user_id=auth.uid());grant select,insert,delete on public.deletion_requests to authenticated;
+create function private.ready_write() returns trigger language plpgsql security definer set search_path='' as $$ begin perform private.require_user();return case when TG_OP='DELETE' then old else new end;end $$;
+do $$ declare t text;begin foreach t in array array['question_sets','questions','rooms','wheels','prizes','themes','event_schedules'] loop execute format('create trigger ready_write before insert or update or delete on public.%I for each row execute function private.ready_write()',t);end loop;end $$;
+grant execute on function public.my_access(),public.server_time(),public.save_question(uuid,uuid,text,text[],text,text,integer,integer,text,text,text[],boolean),public.author_answers(uuid),public.join_room(text,text),public.control_run(uuid,text,uuid,integer),public.current_run(uuid),public.use_hint(uuid),public.submit_answer(uuid,text),public.spin_wheel(uuid,uuid),public.mark_delivered(uuid),public.active_theme(uuid),public.admin_users(),public.admin_set_role(uuid,text),public.grant_spins(uuid,uuid,uuid,integer) to authenticated;
+-- Service-only bootstrap and login lookup. Service credential never reaches browser.
+create function public.bootstrap_admin(p_user uuid,p_email text) returns void language plpgsql security definer set search_path='' as $$ begin
+ if exists(select 1 from private.username_map where username='tamit') then raise exception 'Admin đã được khởi tạo. Không ghi đè.';end if;
+ insert into private.username_map values('tamit',p_email,p_user);update private.user_roles set role='admin',must_change_password=true where user_id=p_user;
+ insert into public.audit_logs(actor_id,action,entity_id) values(p_user,'bootstrap_admin',p_user);end $$;
+create function public.login_lookup(p_username text,p_rate_key text) returns text language plpgsql security definer set search_path='' as $$ declare result text;begin
+ perform private.rate_limit('login:'||p_rate_key,5,300);perform private.rate_limit('username:'||lower(left(p_username,80)),30,300);
+ select email into result from private.username_map where username=lower(p_username);return result;end $$;
+revoke execute on function public.bootstrap_admin(uuid,text),public.login_lookup(text,text) from public,anon,authenticated;
+grant execute on function public.bootstrap_admin(uuid,text),public.login_lookup(text,text) to service_role;
+-- Notify room state changes; answers remain in private schema and never in a publication.
+alter publication supabase_realtime add table public.rooms,public.room_members,public.runs,public.submissions;
+
+create function private.validate_theme() returns trigger language plpgsql set search_path='' as $$ declare k text;begin foreach k in array array['primary','accent','background','ink'] loop if coalesce(new.tokens->>k,'') !~ '^#[0-9A-Fa-f]{6}$' then raise exception 'Theme cần đủ 4 mã màu HEX hợp lệ.';end if;end loop;return new;end $$;
+create trigger validate_theme before insert or update on public.themes for each row execute function private.validate_theme();

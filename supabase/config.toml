@@ -1,0 +1,10 @@
+project_id = "game-tieng-viet-vong-quay"
+[auth]
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173/"]
+enable_signup = true
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+[functions.username-login]
+verify_jwt = false

@@ -1,0 +1,33 @@
+name: Backup mã hóa (tắt mặc định)
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 18 * * *"
+permissions:
+  contents: read
+jobs:
+  backup:
+    # Only opt-in on a private repository with dedicated private backup environment.
+    if: vars.ENABLE_ENCRYPTED_BACKUP == 'true' && github.event.repository.private == true
+    runs-on: ubuntu-latest
+    environment: private-backup
+    env:
+      DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.BACKUP_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.BACKUP_SERVICE_ROLE_KEY }}
+      BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: sudo apt-get update && sudo apt-get install -y age postgresql-client
+      - run: npm ci
+      - run: npm run backup
+      - uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-backup-${{ github.run_id }}
+          path: backups/*.age
+          retention-days: 30
+          if-no-files-found: error
