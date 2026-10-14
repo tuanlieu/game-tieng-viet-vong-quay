@@ -1,6 +1,6 @@
 # Game Tiếng Việt - Vòng Quay May Mắn
 
-Bản mã nguồn **0.1.0 — luồng cốt lõi**, React + TypeScript + Vite, backend Supabase/PostgreSQL. Đây chưa phải sản phẩm đã nghiệm thu toàn bộ yêu cầu 19 mục. Chưa có repository đích hoặc dự án Supabase thật tại thời điểm bàn giao; chưa push, chưa triển khai production.
+Bản mã nguồn **0.1.0 — luồng cốt lõi**, React + TypeScript + Vite, backend Supabase/PostgreSQL. Đây chưa phải sản phẩm đã nghiệm thu toàn bộ yêu cầu 19 mục. Repository và dự án Supabase thật đã được tạo; migration, OAuth và triển khai production vẫn cần được áp dụng, cấu hình và kiểm thử.
 
 ## Bắt đầu nhanh
 
@@ -19,7 +19,7 @@ Bản mã nguồn **0.1.0 — luồng cốt lõi**, React + TypeScript + Vite, b
 
 Dùng Supabase CLI đã cài chính thức: `supabase login`, `supabase link --project-ref <project-ref>`, `supabase db push` và `supabase functions deploy username-login`.
 
-Migration chạy một lần. Chưa chạy trên Supabase thật; kiểm tra trong staging trước. Sau khi áp dụng, kiểm tra RLS và grant thực tế, không chỉ kiểm tra file SQL.
+Migration chạy một lần. Sau khi áp dụng, kiểm tra RLS và grant thực tế, không chỉ kiểm tra file SQL.
 
 ## Tài khoản admin
 
@@ -41,7 +41,7 @@ Script cần các biến: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_EM
 
 ## Triển khai GitHub Pages
 
-Tên repository đề xuất: `tuanlieu/game-tieng-viet-vong-quay`. Kết nối GitHub hiện có quyền push ở các repository khác, nhưng **không dùng chúng cho dự án này**. Bộ công cụ GitHub hiện được cung cấp không có thao tác tạo repository mới. Người dùng cần tạo repository trống và cung cấp link.
+Repository nguồn: `tuanlieu/game-tieng-viet-vong-quay`. Mã nguồn đã được push; GitHub Pages chưa được bật.
 
 Workflow `ci.yml` kiểm tra mã nguồn. `pages.yml` chỉ chạy theo yêu cầu và chỉ triển khai khi các biến `ALLOW_PRODUCTION_DEPLOY`, `BACKEND_ACCEPTANCE_VERIFIED`, `BROWSER_QA_VERIFIED` đều là `true`. Chỉ bật sau khi kiểm thử backend thật, OAuth, E2E, responsive và restore đáp ứng yêu cầu nghiệm thu. Không bật chỉ vì unit test cục bộ đạt.
 
