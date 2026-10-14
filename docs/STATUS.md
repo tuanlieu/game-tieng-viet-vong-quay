@@ -4,7 +4,7 @@
 
 | Nhóm đặc tả | Đã viết | Kiểm chứng / phần còn thiếu |
 |---|---|---|
-| React/TypeScript/Vite + Supabase | Frontend, SQL migration, RPC, Edge login | Build/typecheck/lint đạt; dự án Supabase thật đã tạo, migration/Edge function chưa áp dụng |
+| React/TypeScript/Vite + Supabase | Frontend, SQL migration, RPC, RLS/policy/Realtime | Build/typecheck/lint đạt; hai migration đã áp dụng trên Supabase thật, Edge Function chưa deploy |
 | Màu, ô 3D, sidebar, sáng/tối | Bộ màu yêu cầu, ô chữ bóng mềm, sidebar thu gọn/drawer, reduced motion | Chưa QA bằng ảnh chụp ở 7 kích thước; không có file logo khả dụng |
 | Theme xu hướng 2026 | 2 bảng lấy cảm hứng, nguồn và ngày cập nhật | HEX thiết kế, không gắn nhãn mã chính thức |
 | Theme sự kiện Việt Nam | 11 bảng phối + Halloween; preview, custom, lưu theme, JSON export | Chưa có họa tiết/banner/ảnh/âm thanh; chưa nhập/restore theme và cảnh báo tương phản |
