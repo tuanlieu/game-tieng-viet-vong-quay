@@ -1,6 +1,6 @@
 # Game Tiếng Việt - Vòng Quay May Mắn
 
-Bản mã nguồn **0.1.0 — luồng cốt lõi**, React + TypeScript + Vite, backend Supabase/PostgreSQL. Đây chưa phải sản phẩm đã nghiệm thu toàn bộ yêu cầu 19 mục. Repository và dự án Supabase thật đã được tạo; migration, OAuth và triển khai production vẫn cần được áp dụng, cấu hình và kiểm thử.
+Bản mã nguồn **0.1.0 — luồng cốt lõi**, React + TypeScript + Vite, backend Supabase/PostgreSQL. Đây chưa phải sản phẩm đã nghiệm thu toàn bộ yêu cầu 19 mục. Repository, dự án Supabase và hai migration đã được áp dụng; Edge Function, OAuth và triển khai production vẫn cần được cấu hình và kiểm thử.
 
 ## Bắt đầu nhanh
 
@@ -19,7 +19,7 @@ Bản mã nguồn **0.1.0 — luồng cốt lõi**, React + TypeScript + Vite, b
 
 Dùng Supabase CLI đã cài chính thức: `supabase login`, `supabase link --project-ref <project-ref>`, `supabase db push` và `supabase functions deploy username-login`.
 
-Migration chạy một lần. Sau khi áp dụng, kiểm tra RLS và grant thực tế, không chỉ kiểm tra file SQL.
+Hai migration đã được áp dụng cho dự án Supabase thật. Không chạy lại trên cùng database; với môi trường mới, áp dụng theo thứ tự trên. Sau khi áp dụng, kiểm tra RLS và grant thực tế, không chỉ kiểm tra file SQL.
 
 ## Tài khoản admin
 
