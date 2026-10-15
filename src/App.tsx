@@ -40,6 +40,7 @@ import { themes, type Theme } from "./lib/game";
 import {
   Button,
   Card,
+  Field,
   PageTitle,
   Unavailable,
   errorText,
@@ -108,6 +109,10 @@ export default function App() {
     [roomScope, setRoomScope] = useState<string | null>(null),
     [connected, setConnected] = useState(navigator.onLine),
     [counts, setCounts] = useState({ sets: 0, rooms: 0, wheels: 0 });
+  const [quickCode, setQuickCode] = useState(
+    location.hash.startsWith("#join=") ? location.hash.slice(6, 14) : "",
+  );
+  const [quickName, setQuickName] = useState("");
   const effective = eventTheme || baseTheme;
   const accountName = session
     ? String(
@@ -117,9 +122,25 @@ export default function App() {
           "Tài khoản của bạn",
       )
     : "Khách tham quan";
+  const isAnonymous = Boolean(session?.user.is_anonymous);
   function go(p: Page) {
     setPage(p);
     setDrawer(false);
+  }
+  function goToGuestRoom() {
+    const name = quickName.trim();
+    if (name.length < 2 || name.length > 30) {
+      setToast("Tên người chơi hoặc tên đội cần từ 2–30 ký tự.");
+      return;
+    }
+    const code = quickCode.trim().toUpperCase();
+    if (!code) {
+      setToast("Hãy nhập mã phòng.");
+      return;
+    }
+    sessionStorage.setItem("game-guest-name", name);
+    location.hash = "#join=" + code;
+    go("rooms");
   }
   useEffect(() => {
     if (!db) return;
@@ -246,6 +267,7 @@ export default function App() {
   }
   const protectedPage = ![
     "overview",
+    "rooms",
     "login",
     "guide",
     "privacy",
@@ -458,7 +480,7 @@ export default function App() {
                   <div className="actions">
                     <Button kind="yellow" onClick={() => go("rooms")}>
                       <Play size={17} />
-                      Tổ chức trò chơi
+                      Đăng nhập / Tạo phòng
                       <ArrowUpRight size={17} />
                     </Button>
                     <Button kind="hero-outline" onClick={() => go("questions")}>
@@ -498,6 +520,44 @@ export default function App() {
                   </span>
                 </div>
               </section>
+              {!session && (
+                <Card className="guest-join-card home-guest-join">
+                  <span className="eyebrow">THAM GIA CHƠI</span>
+                  <h2>Vào phòng trong vài giây</h2>
+                  <p>Chỉ cần mã phòng và tên của bạn để tham gia.</p>
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      goToGuestRoom();
+                    }}
+                  >
+                    <div className="two-columns">
+                      <Field label="Mã phòng">
+                        <input
+                          required
+                          value={quickCode}
+                          maxLength={8}
+                          onChange={(e) => setQuickCode(e.target.value.toUpperCase())}
+                          placeholder="Ví dụ: A1B2C3D4"
+                        />
+                      </Field>
+                      <Field label="Tên người chơi / Tên đội">
+                        <input
+                          required
+                          value={quickName}
+                          minLength={2}
+                          maxLength={30}
+                          onChange={(e) => setQuickName(e.target.value)}
+                          placeholder="Ví dụ: Đội Sao Mai"
+                        />
+                      </Field>
+                    </div>
+                    <Button type="submit" kind="yellow">
+                      <Play size={16} /> Vào chơi
+                    </Button>
+                  </form>
+                </Card>
+              )}
               <div className="metrics">
                 <Metric
                   icon={BookOpen}
@@ -614,9 +674,10 @@ export default function App() {
           )}
           {visiblePage === "login" && <Auth notify={setToast} />}
           {visiblePage === "questions" && <Questions notify={setToast} />}
-          {visiblePage === "rooms" && session && (
+          {visiblePage === "rooms" && (
             <Rooms
-              userId={session.user.id}
+              userId={session?.user.id}
+              isAnonymous={isAnonymous}
               notify={setToast}
               onActivity={setActive}
               onTheme={setRoomScope}
