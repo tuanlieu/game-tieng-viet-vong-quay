@@ -6,7 +6,11 @@ export const configured =
 export const db = configured
   ? createClient(url, key, {
       auth: {
-        flowType: "pkce",
+        // GitHub Pages is a browser-only app. The implicit flow puts the
+        // session in the confirmation redirect, so email links opened from
+        // Gmail/Safari can complete without the PKCE verifier from the tab
+        // where the account was created.
+        flowType: "implicit",
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
