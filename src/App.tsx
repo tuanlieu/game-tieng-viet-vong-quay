@@ -114,7 +114,10 @@ export default function App() {
   );
   const [quickName, setQuickName] = useState("");
   const effective = eventTheme || baseTheme;
-  const accountName = session
+  const isAnonymous = Boolean(session?.user.is_anonymous);
+  const accountName = isAnonymous
+    ? "Khách chơi"
+    : session
     ? String(
         session.user.user_metadata?.display_name ||
           session.user.user_metadata?.full_name ||
@@ -122,7 +125,6 @@ export default function App() {
           "Tài khoản của bạn",
       )
     : "Khách tham quan";
-  const isAnonymous = Boolean(session?.user.is_anonymous);
   function go(p: Page) {
     setPage(p);
     setDrawer(false);
@@ -276,7 +278,7 @@ export default function App() {
   const visiblePage =
     mustChange && session
       ? "profile"
-      : protectedPage && !session
+      : protectedPage && (!session || isAnonymous)
         ? "login"
         : page;
   const nav = [
@@ -362,7 +364,7 @@ export default function App() {
           </div>
           <button
             className="profile-chip"
-            onClick={() => go(session ? "profile" : "login")}
+            onClick={() => go(isAnonymous ? "rooms" : session ? "profile" : "login")}
           >
             <span className="avatar">
               <UserRound size={19} />
@@ -375,7 +377,9 @@ export default function App() {
                 {role === "admin"
                   ? "Quản trị viên"
                   : session
-                    ? "Người dùng"
+                    ? isAnonymous
+                      ? "Khách chơi"
+                      : "Người dùng"
                     : "Đăng nhập để lưu nội dung"}
               </small>
             </div>
