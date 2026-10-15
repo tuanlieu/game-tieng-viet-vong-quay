@@ -34,6 +34,8 @@ create index if not exists run_rewards_room_idx on public.run_rewards(room_id,aw
 alter table public.room_reward_inventory enable row level security;
 alter table public.run_rewards enable row level security;
 revoke all on public.room_reward_inventory, public.run_rewards from anon, authenticated;
+drop policy if exists reward_inventory_owner on public.room_reward_inventory;
+drop policy if exists run_rewards_read on public.run_rewards;
 create policy reward_inventory_owner on public.room_reward_inventory for select to authenticated using(exists(select 1 from public.rooms r where r.id=room_id and (r.owner_id=auth.uid() or private.is_admin())));
 create policy run_rewards_read on public.run_rewards for select to authenticated using(user_id=auth.uid() or exists(select 1 from public.rooms r where r.id=room_id and (r.owner_id=auth.uid() or private.is_admin())));
 grant select on public.room_reward_inventory, public.run_rewards to authenticated;
