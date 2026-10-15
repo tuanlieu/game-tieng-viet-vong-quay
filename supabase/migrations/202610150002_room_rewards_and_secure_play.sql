@@ -180,4 +180,8 @@ create policy submissions_read_safe on public.submissions for select to authenti
 );
 grant execute on function public.configure_room_reward(uuid,boolean,uuid),public.validate_room_invitation(text),public.duplicate_room(uuid,text),public.delete_room(uuid),public.spin_room_reward(uuid),public.room_play_state(uuid),public.control_run(uuid,text,uuid,integer) to authenticated;
 grant update(reward_fastest_enabled,reward_wheel_id) on public.rooms to authenticated;
-alter publication supabase_realtime add table public.run_rewards;
+do $$ begin
+  alter publication supabase_realtime add table public.run_rewards;
+exception when duplicate_object then
+  null; -- It was added by a prior, partially completed run.
+end $$;
