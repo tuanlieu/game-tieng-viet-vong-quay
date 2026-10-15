@@ -102,6 +102,14 @@ export default function App() {
     [connected, setConnected] = useState(navigator.onLine),
     [counts, setCounts] = useState({ sets: 0, rooms: 0, wheels: 0 });
   const effective = eventTheme || baseTheme;
+  const accountName = session
+    ? String(
+        session.user.user_metadata?.display_name ||
+          session.user.user_metadata?.full_name ||
+          session.user.email ||
+          "Tài khoản của bạn",
+      )
+    : "Khách tham quan";
   function go(p: Page) {
     setPage(p);
     setDrawer(false);
@@ -327,7 +335,7 @@ export default function App() {
             </span>
             <div>
               <strong>
-                {session ? "Tài khoản của bạn" : "Khách tham quan"}
+                {accountName}
               </strong>
               <small>
                 {role === "admin"
