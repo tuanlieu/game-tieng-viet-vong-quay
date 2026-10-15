@@ -30,6 +30,9 @@ import {
   type Run,
   type Question,
   type Wheel,
+  type PlayState,
+  type MySubmission,
+  type RoomReward,
 } from "../lib/api";
 import { secondsLeft, type Theme } from "../lib/game";
 type Member = {
@@ -37,13 +40,7 @@ type Member = {
   display_name: string;
   team_name: string | null;
   last_seen_at: string;
-};
-type Submission = {
-  id: string;
-  run_id: string;
-  user_id: string;
   score: number;
-  correct: boolean;
 };
 export default function Rooms({
   userId,
@@ -82,7 +79,8 @@ export default function Rooms({
     [team, setTeam] = useState("");
   const [run, setRun] = useState<Run | null>(null),
     [members, setMembers] = useState<Member[]>([]),
-    [submissions, setSubmissions] = useState<Submission[]>([]),
+    [mySubmission, setMySubmission] = useState<MySubmission | null>(null),
+    [roomReward, setRoomReward] = useState<RoomReward | null>(null),
     [questions, setQuestions] = useState<Question[]>([]),
     [questionId, setQuestionId] = useState(""),
     [chosen, setChosen] = useState<number[]>([]),
@@ -141,31 +139,14 @@ export default function Rooms({
       loading = true;
       try {
         const sent = Date.now();
-        const data = await rpc<Run | null>("current_run", { p_room: selected });
+        const state = await rpc<PlayState>("room_play_state", { p_room: selected });
         if (!alive) return;
-        setRun(data);
-        if (data)
-          setOffset(Date.parse(data.server_now) - (sent + Date.now()) / 2);
-        const results = await Promise.all([
-          client()
-            .from("room_members")
-            .select("user_id,display_name,team_name,last_seen_at")
-            .eq("room_id", selected)
-            .is("removed_at", null),
-          client().from("runs").select("id").eq("room_id", selected),
-        ]);
-        for (const r of results) if (r.error) throw r.error;
-        if (!alive) return;
-        setMembers(results[0].data as unknown as Member[]);
-        const ids = results[1].data?.map((r) => r.id as string) || [];
-        if (ids.length) {
-          const { data, error } = await client()
-            .from("submissions")
-            .select("*")
-            .in("run_id", ids);
-          if (error) throw error;
-          if (alive) setSubmissions(data);
-        }
+        setRun(state.run);
+        setMembers(state.members);
+        setMySubmission(state.my_submission);
+        setRoomReward(state.reward);
+        if (state.run)
+          setOffset(Date.parse(state.run.server_now) - (sent + Date.now()) / 2);
         await loadRooms();
       } catch (e) {
         if (alive) notify(errorText(e));
@@ -189,12 +170,7 @@ export default function Rooms({
       )
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "room_members",
-          filter: "room_id=eq." + selected,
-        },
+        { event: "*", schema: "public", table: "room_members", filter: "room_id=eq." + selected },
         () => void refresh(),
       )
       .on(
@@ -205,6 +181,11 @@ export default function Rooms({
           table: "rooms",
           filter: "id=eq." + selected,
         },
+        () => void refresh(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "run_rewards", filter: "room_id=eq." + selected },
         () => void refresh(),
       )
       .subscribe();
@@ -258,14 +239,15 @@ export default function Rooms({
         }
       });
   }, [room?.set_id, isOwner]);
+  useEffect(() => {
+    if (room?.reward_wheel_id) setRewardWheel(room.reward_wheel_id);
+  }, [room?.reward_wheel_id]);
   const left =
     run?.state === "paused"
       ? Math.ceil(run.remaining)
       : secondsLeft(run?.deadline || null, offset);
   void tick;
-  const answered = submissions.some(
-    (s) => s.run_id === run?.id && s.user_id === userId,
-  );
+  const answered = Boolean(mySubmission?.submitted);
   const canSubmit =
     run?.state === "running" &&
     left > 0 &&
@@ -335,16 +317,12 @@ export default function Rooms({
         (run?.mode === "words"
           ? chosen.map((i) => run.tiles[i]).join(" ")
           : chosen.map((i) => run?.tiles[i]).join(""));
-      const result = await rpc<Submission>("submit_answer", {
+      await rpc("submit_answer", {
         p_run: run?.id,
         p_answer: answer,
       });
-      setSubmissions((s) => [...s.filter((x) => x.id !== result.id), result]);
-      notify(
-        result.correct
-          ? `✓ Chính xác! Bạn nhận ${result.score} điểm.`
-          : "Chưa chính xác. Chờ MC công bố đáp án.",
-      );
+      setMySubmission({ submitted: true, answer, correct: null, score: null });
+      notify("Đã gửi câu trả lời. Chờ MC công bố đáp án.");
     } catch (e) {
       notify(errorText(e));
     } finally {
@@ -370,14 +348,22 @@ export default function Rooms({
       notify(errorText(e));
     }
   }
-  const scores = members
-    .map((m) => ({
-      ...m,
-      score: submissions
-        .filter((s) => s.user_id === m.user_id)
-        .reduce((n, s) => n + s.score, 0),
-    }))
-    .sort((a, b) => b.score - a.score);
+  async function spinReward() {
+    if (!roomReward?.mine || roomReward.state !== "available") return;
+    setBusy(true);
+    try {
+      const result = await rpc<{ label: string; color: string }>("spin_room_reward", {
+        p_reward: roomReward.id,
+      });
+      setRoomReward({ ...roomReward, state: "spun", label: result.label, color: result.color });
+      notify(`🎉 Bạn đã quay được: ${result.label}`);
+    } catch (e) {
+      notify(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const scores = [...members].sort((a, b) => b.score - a.score || a.display_name.localeCompare(b.display_name));
   return (
     <div className={presentation ? "presentation" : ""}>
       <PageTitle
@@ -484,16 +470,16 @@ export default function Rooms({
       {!presentation && (isAnonymous || !userId) && (
         <Card className="guest-join-card">
           <span className="eyebrow">VÀO CHƠI NGAY</span>
-          <h2>Chỉ cần mã phòng và tên của bạn</h2>
-          <p>Chỉ cần mã phòng và tên của bạn để tham gia.</p>
+          <h2>{code ? "Nhập tên để vào phòng" : "Chỉ cần mã phòng và tên của bạn"}</h2>
+          <p>{code ? "Mã phòng đã được điền từ link mời." : "Chỉ cần mã phòng và tên của bạn để tham gia."}</p>
           <form
             onSubmit={(e) => {
               e.preventDefault();
               void join();
             }}
           >
-            <div className="two-columns">
-              <Field label="Mã phòng">
+            <div className={code ? "" : "two-columns"}>
+              {!code && <Field label="Mã phòng">
                 <input
                   required
                   value={code}
@@ -501,7 +487,7 @@ export default function Rooms({
                   onChange={(e) => setCode(e.target.value.toUpperCase())}
                   placeholder="Ví dụ: A1B2C3D4"
                 />
-              </Field>
+              </Field>}
               <Field label="Tên người chơi hoặc tên đội">
                 <input
                   required
@@ -576,6 +562,37 @@ export default function Rooms({
                     }
                   >
                     Kết thúc phòng
+                  </Button>
+                  <Button
+                    kind="outline"
+                    onClick={() => {
+                      const next = prompt("Tên mới cho phòng", room.title);
+                      if (next?.trim()) void patchRoom({ title: next.trim() });
+                    }}
+                  >
+                    Sửa phòng
+                  </Button>
+                  <Button
+                    kind="outline"
+                    onClick={() =>
+                      void rpc<string>("duplicate_room", { p_room: selected })
+                        .then(async (id) => { await loadRooms(); setSelected(id); notify("Đã nhân đôi phòng. Phòng mới đang chờ người chơi."); })
+                        .catch((e) => notify(errorText(e)))
+                    }
+                  >
+                    Nhân đôi
+                  </Button>
+                  <Button
+                    kind="subtle"
+                    disabled={room.status === "playing"}
+                    onClick={() => {
+                      if (confirm("Xóa phòng này và lịch sử chơi trong phòng? Thao tác không thể hoàn tác."))
+                        void rpc("delete_room", { p_room: selected })
+                          .then(async () => { await loadRooms(); setSelected(""); notify("Đã xóa phòng."); })
+                          .catch((e) => notify(errorText(e)));
+                    }}
+                  >
+                    Xóa phòng
                   </Button>
                 </>
               )}
@@ -705,9 +722,9 @@ export default function Rooms({
                       Gợi ý: {hint || "Câu này chưa có gợi ý."}
                     </div>
                   )}
-                  {answered && (
+                  {answered && !run.revealed && (
                     <div className="notice">
-                      Bạn đã nộp câu này. Kết quả được lưu trên server.
+                      Đã gửi câu trả lời: <strong>{mySubmission?.answer}</strong>. Kết quả được lưu trên server.
                     </div>
                   )}
                   {run.revealed && (
@@ -715,6 +732,25 @@ export default function Rooms({
                       <small>ĐÁP ÁN</small>
                       <h2>{run.revealed.answer}</h2>
                       <p>{run.revealed.explanation}</p>
+                      {mySubmission ? (
+                        <p className={mySubmission.correct ? "result-good" : "result-bad"}>
+                          Câu trả lời của bạn: <strong>{mySubmission.answer}</strong> · {mySubmission.correct ? `Đúng, +${mySubmission.score} điểm` : "Chưa đúng"}
+                        </p>
+                      ) : (
+                        <p>Bạn chưa gửi câu trả lời.</p>
+                      )}
+                    </div>
+                  )}
+                  {roomReward && run.revealed && (
+                    <div className={"reward-banner " + (roomReward.state === "spun" ? "spun" : "")}>
+                      {roomReward.state === "spun" ? (
+                        <><strong>🎊 {roomReward.winner} đã quay được {roomReward.label}</strong><span style={{ background: roomReward.color || "#F8A41E" }} /></>
+                      ) : (
+                        <>
+                          <strong>🎉 {roomReward.winner} trả lời đúng nhanh nhất và nhận 1 lượt quay may mắn!</strong>
+                          {roomReward.mine && <Button disabled={busy} onClick={() => void spinReward()}><Play size={16} /> Quay ngay</Button>}
+                        </>
+                      )}
                     </div>
                   )}
                 </>
@@ -767,6 +803,22 @@ export default function Rooms({
                       ))}
                     </select>
                   </Field>
+                  <label className="switch-row">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(room.reward_fastest_enabled)}
+                      onChange={(e) =>
+                        void rpc("configure_room_reward", {
+                          p_room: selected,
+                          p_enabled: e.target.checked,
+                          p_wheel: e.target.checked ? rewardWheel || null : null,
+                        })
+                          .then(() => loadRooms())
+                          .catch((err) => notify(errorText(err)))
+                      }
+                    />
+                    Thưởng 1 lượt quay cho người trả lời đúng nhanh nhất mỗi câu
+                  </label>
                   <select
                     aria-label="Chọn câu"
                     value={questionId}
@@ -853,27 +905,6 @@ export default function Rooms({
                     <small>{m.team_name || "Cá nhân"}</small>
                   </div>
                   <b>{m.score}</b>
-                  {isOwner && !presentation && rewardWheel && (
-                    <button
-                      aria-label="Cấp một lượt quay"
-                      onClick={() =>
-                        void rpc("grant_spins", {
-                          p_room: selected,
-                          p_wheel: rewardWheel,
-                          p_user: m.user_id,
-                          p_count: 1,
-                        })
-                          .then(() =>
-                            notify(
-                              "Đã cấp 1 lượt quay. Người chơi mở Vòng quay để sử dụng.",
-                            ),
-                          )
-                          .catch((e) => notify(errorText(e)))
-                      }
-                    >
-                      +1 quay
-                    </button>
-                  )}
                   {isOwner && !presentation && (
                     <button
                       aria-label="Loại người chơi"
@@ -905,7 +936,7 @@ export default function Rooms({
                   download(
                     "ket-qua-phong.json",
                     JSON.stringify(
-                      { room: room.title, scores, submissions },
+                      { room: room.title, scores },
                       null,
                       2,
                     ),
