@@ -24,6 +24,7 @@ import {
   rpc,
   listSets,
   download,
+  startGuestSession,
   type SetRecord,
   type Room,
   type Run,
@@ -35,6 +36,7 @@ type Member = {
   user_id: string;
   display_name: string;
   team_name: string | null;
+  last_seen_at: string;
 };
 type Submission = {
   id: string;
@@ -45,22 +47,37 @@ type Submission = {
 };
 export default function Rooms({
   userId,
+  isAnonymous,
   notify,
   onActivity,
   onTheme,
 }: {
-  userId: string;
+  userId?: string;
+  isAnonymous: boolean;
   notify: (s: string) => void;
   onActivity: (active: boolean) => void;
   onTheme: (room: string | null) => void;
 }) {
+  const savedGuest = (() => {
+    try {
+      return JSON.parse(sessionStorage.getItem("game-guest-room") || "null") as {
+        roomId?: string;
+        name?: string;
+      } | null;
+    } catch {
+      return null;
+    }
+  })();
   const [rooms, setRooms] = useState<Room[]>([]),
     [sets, setSets] = useState<SetRecord[]>([]),
-    [selected, setSelected] = useState(""),
+    [selected, setSelected] = useState(savedGuest?.roomId || ""),
     [title, setTitle] = useState(""),
     [setId, setSetId] = useState(""),
     [code, setCode] = useState(
       location.hash.startsWith("#join=") ? location.hash.slice(6, 14) : "",
+    ),
+    [playerName, setPlayerName] = useState(
+      savedGuest?.name || sessionStorage.getItem("game-guest-name") || "",
     ),
     [team, setTeam] = useState("");
   const [run, setRun] = useState<Run | null>(null),
@@ -79,7 +96,7 @@ export default function Rooms({
     [myWheels, setMyWheels] = useState<Wheel[]>([]),
     [rewardWheel, setRewardWheel] = useState("");
   const room = rooms.find((r) => r.id === selected);
-  const isOwner = room?.owner_id === userId;
+  const isOwner = !!userId && !isAnonymous && room?.owner_id === userId;
   async function loadRooms() {
     try {
       const { data, error } = await client()
@@ -93,21 +110,24 @@ export default function Rooms({
     }
   }
   useEffect(() => {
-    void client()
-      .from("themes")
-      .select("*")
-      .eq("owner_id", userId)
-      .then(({ data }) => setSavedThemes(data || []));
-    void client()
-      .from("wheels")
-      .select("*")
-      .eq("owner_id", userId)
-      .then(({ data }) => setMyWheels(data || []));
+    if (!userId) return;
+    if (!isAnonymous) {
+      void client()
+        .from("themes")
+        .select("*")
+        .eq("owner_id", userId)
+        .then(({ data }) => setSavedThemes(data || []));
+      void client()
+        .from("wheels")
+        .select("*")
+        .eq("owner_id", userId)
+        .then(({ data }) => setMyWheels(data || []));
+      void listSets()
+        .then((s) => setSets(s.filter((s) => s.owner_id === userId)))
+        .catch((e) => notify(errorText(e)));
+    }
     void loadRooms();
-    void listSets()
-      .then((s) => setSets(s.filter((s) => s.owner_id === userId)))
-      .catch((e) => notify(errorText(e)));
-  }, []);
+  }, [userId, isAnonymous]);
   useEffect(() => {
     if (!selected) {
       setRun(null);
@@ -129,8 +149,9 @@ export default function Rooms({
         const results = await Promise.all([
           client()
             .from("room_members")
-            .select("user_id,display_name,team_name")
-            .eq("room_id", selected),
+            .select("user_id,display_name,team_name,last_seen_at")
+            .eq("room_id", selected)
+            .is("removed_at", null),
           client().from("runs").select("id").eq("room_id", selected),
         ]);
         for (const r of results) if (r.error) throw r.error;
@@ -196,6 +217,16 @@ export default function Rooms({
     };
   }, [selected]);
   useEffect(() => {
+    if (!selected || !userId || isOwner) return;
+    const touch = () =>
+      void rpc("touch_room_member", { p_room: selected }).catch(() => {
+        /* A removed player must not silently regain access. */
+      });
+    touch();
+    const timer = setInterval(touch, 20000);
+    return () => clearInterval(timer);
+  }, [selected, userId, isOwner]);
+  useEffect(() => {
     const timer = setInterval(() => setTick((n) => n + 1), 250);
     return () => clearInterval(timer);
   }, []);
@@ -235,7 +266,12 @@ export default function Rooms({
   const answered = submissions.some(
     (s) => s.run_id === run?.id && s.user_id === userId,
   );
-  const canSubmit = run?.state === "running" && left > 0 && !answered && !busy;
+  const canSubmit =
+    run?.state === "running" &&
+    left > 0 &&
+    run?.can_answer !== false &&
+    !answered &&
+    !busy;
   async function create() {
     try {
       const { data, error } = await client()
@@ -254,12 +290,19 @@ export default function Rooms({
   }
   async function join() {
     try {
+      if (!userId) await startGuestSession(playerName);
       const id = await rpc<string>("join_room", {
         p_code: code,
+        p_display_name: playerName,
         p_team: team || null,
       });
       await loadRooms();
       setSelected(id);
+      sessionStorage.setItem(
+        "game-guest-room",
+        JSON.stringify({ roomId: id, name: playerName.trim() }),
+      );
+      sessionStorage.setItem("game-guest-name", playerName.trim());
       setCode("");
     } catch (e) {
       notify(errorText(e));
@@ -358,7 +401,7 @@ export default function Rooms({
           {presentation ? "Thoát trình chiếu" : "Trình chiếu"}
         </Button>
       </PageTitle>
-      {!presentation && (
+      {!presentation && !isAnonymous && userId && (
         <div className="two-columns">
           <Card>
             <h2>Tổ chức trò chơi</h2>
@@ -397,7 +440,8 @@ export default function Rooms({
             </form>
           </Card>
           <Card>
-            <h2>Tham gia cùng bạn bè</h2>
+            <h2>Tham gia phòng chơi</h2>
+            <p>Không cần đăng nhập. Nhập tên và mã phòng để bắt đầu.</p>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -412,10 +456,20 @@ export default function Rooms({
                   onChange={(e) => setCode(e.target.value.toUpperCase())}
                 />
               </Field>
+              <Field label="Tên người chơi hoặc tên đội">
+                <input
+                  required
+                  value={playerName}
+                  minLength={2}
+                  maxLength={30}
+                  onChange={(e) => setPlayerName(e.target.value)}
+                  placeholder="Ví dụ: Đội Sao Mai"
+                />
+              </Field>
               <Field label="Tên đội (không bắt buộc)">
                 <input
                   value={team}
-                  maxLength={80}
+                  maxLength={30}
                   onChange={(e) => setTeam(e.target.value)}
                 />
               </Field>
@@ -427,7 +481,45 @@ export default function Rooms({
           </Card>
         </div>
       )}
-      {!presentation && (
+      {!presentation && (isAnonymous || !userId) && (
+        <Card className="guest-join-card">
+          <span className="eyebrow">VÀO CHƠI NGAY</span>
+          <h2>Chỉ cần mã phòng và tên của bạn</h2>
+          <p>Chỉ cần mã phòng và tên của bạn để tham gia.</p>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void join();
+            }}
+          >
+            <div className="two-columns">
+              <Field label="Mã phòng">
+                <input
+                  required
+                  value={code}
+                  maxLength={8}
+                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  placeholder="Ví dụ: A1B2C3D4"
+                />
+              </Field>
+              <Field label="Tên người chơi hoặc tên đội">
+                <input
+                  required
+                  value={playerName}
+                  minLength={2}
+                  maxLength={30}
+                  onChange={(e) => setPlayerName(e.target.value)}
+                  placeholder="Ví dụ: Đội Sao Mai"
+                />
+              </Field>
+            </div>
+            <Button type="submit">
+              <Play size={16} /> Vào phòng chơi
+            </Button>
+          </form>
+        </Card>
+      )}
+      {!presentation && userId && (
         <Field label="Phòng của bạn">
           <select
             value={selected}
@@ -507,6 +599,8 @@ export default function Rooms({
                       ? "MC đã tạm dừng."
                       : run.state === "revealed"
                         ? "Đáp án đã được công bố."
+                        : run.can_answer === false
+                          ? "Bạn vào khi câu này đã bắt đầu. Hãy sẵn sàng cho câu tiếp theo."
                         : "Chạm vào từng ô theo thứ tự. Có thể nhập trực tiếp bằng bàn phím."}
                   </p>
                   <div className="progress">
@@ -648,6 +742,18 @@ export default function Rooms({
                       ))}
                     </select>
                   </Field>
+                  <Button
+                    kind="outline"
+                    onClick={() =>
+                      void patchRoom({
+                        late_join_enabled: !room.late_join_enabled,
+                      })
+                    }
+                  >
+                    {room.late_join_enabled
+                      ? "Tắt tham gia muộn"
+                      : "Cho phép tham gia muộn"}
+                  </Button>
                   <Field label="Vòng quay cấp lượt cho thành viên">
                     <select
                       value={rewardWheel}
@@ -773,19 +879,22 @@ export default function Rooms({
                       aria-label="Loại người chơi"
                       onClick={() => {
                         if (confirm("Loại người chơi khỏi phòng?"))
-                          void client()
-                            .from("room_members")
-                            .delete()
-                            .eq("room_id", selected)
-                            .eq("user_id", m.user_id)
-                            .then(({ error }) => {
-                              if (error) notify(error.message);
-                            });
+                          void rpc("remove_room_member", {
+                            p_room: selected,
+                            p_user: m.user_id,
+                          })
+                            .then(() => notify("Đã loại người chơi khỏi phòng."))
+                            .catch((e) => notify(errorText(e)));
                       }}
                     >
                       ×
                     </button>
                   )}
+                  <small>
+                    {Date.now() - Date.parse(m.last_seen_at) < 45000
+                      ? "Đang hoạt động"
+                      : "Ngoại tuyến"}
+                  </small>
                   {i === 0 && <span className="sr-only">Đang dẫn đầu</span>}
                 </div>
               ))}
