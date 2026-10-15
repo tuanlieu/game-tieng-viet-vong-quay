@@ -1,6 +1,8 @@
 name: Triển khai GitHub Pages có kiểm soát
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 permissions:
   contents: read
   pages: write
