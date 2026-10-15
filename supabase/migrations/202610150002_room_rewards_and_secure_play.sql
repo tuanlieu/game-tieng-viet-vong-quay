@@ -55,7 +55,7 @@ begin
  if p_wheel is null or not exists(select 1 from public.wheels where id=p_wheel and owner_id=r.owner_id) then raise exception 'Hãy chọn vòng quay thuộc chủ phòng.'; end if;
  select count(*),coalesce(sum(weight),0) into valid_count,total from public.prizes where wheel_id=p_wheel and enabled and weight>0 and (stock is null or stock>0);
  if valid_count not between 2 and 100 or total<=0 then raise exception 'Vòng quay cần 2–100 phần thưởng khả dụng, có trọng số hợp lệ.'; end if;
- if exists(select 1 from public.wheels where id=p_wheel and probability_mode='percent') and abs(total-100)>0.000001 then raise exception 'Tổng xác suất của vòng quay phải bằng 100%%.'; end if;
+ if exists(select 1 from public.wheels where id=p_wheel and probability_mode='percent') and abs(total-100)>0.000001 then raise exception 'Tổng xác suất của vòng quay phải bằng một trăm phần trăm.'; end if;
  update public.rooms set reward_fastest_enabled=true,reward_wheel_id=p_wheel where id=p_room;
  delete from public.room_reward_inventory where room_id=p_room;
  insert into public.room_reward_inventory(room_id,prize_id,label,color,weight,remaining,enabled,position)
