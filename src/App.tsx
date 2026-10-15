@@ -28,7 +28,14 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { db, configured, rpc, client, download } from "./lib/api";
+import {
+  db,
+  configured,
+  rpc,
+  client,
+  download,
+  consumeAuthCallback,
+} from "./lib/api";
 import { themes, type Theme } from "./lib/game";
 import {
   Button,
@@ -116,6 +123,7 @@ export default function App() {
   }
   useEffect(() => {
     if (!db) return;
+    const auth = db;
     let alive = true;
     async function update(s: Session | null) {
       if (!alive) return;
@@ -137,8 +145,12 @@ export default function App() {
         setToast(errorText(e));
       }
     }
-    void db.auth.getSession().then(({ data }) => void update(data.session));
-    const { data } = db.auth.onAuthStateChange((event, s) => {
+    void consumeAuthCallback()
+      .catch((e) => setToast(errorText(e)))
+      .finally(() => {
+        void auth.auth.getSession().then(({ data }) => void update(data.session));
+      });
+    const { data } = auth.auth.onAuthStateChange((event, s) => {
       setSession(s);
       if (event === "PASSWORD_RECOVERY") {
         setPage("profile");
