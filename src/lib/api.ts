@@ -158,6 +158,17 @@ export type RoomReward = {
 export type RewardStatus = {
   enabled: boolean;
   available_count: number;
+  wheel: {
+    id: string;
+    title: string;
+    items: Array<{
+      id: string;
+      label: string;
+      color: string;
+      remaining: number | null;
+      position: number;
+    }>;
+  } | null;
   history: Array<{
     id: string;
     state: "available" | "spun" | "void";

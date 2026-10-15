@@ -65,6 +65,12 @@ beforeAll(async () => {
       "utf8",
     ),
   );
+  await db.exec(
+    readFileSync(
+      new URL("../supabase/migrations/202610150004_reward_inventory_snapshot.sql", import.meta.url),
+      "utf8",
+    ),
+  );
   await root("insert into auth.users(id) values($1),($2),($3)", [
     owner,
     player,
@@ -228,6 +234,12 @@ describe("SQL thực thi trong PostgreSQL PGlite (Auth/Realtime giả lập)", (
     await as(owner, "select public.configure_room_reward($1,true,$2)", [roomId, configuredWheelId]);
     const before = await as(player, "select public.room_play_state($1) as state", [roomId]);
     expect(before.rows[0].state).toMatchObject({ reward_status: { enabled: true, available_count: 0 } });
+    expect(before.rows[0].state.reward_status.wheel.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Huy hiệu", remaining: 5 }),
+        expect.objectContaining({ label: "Bút mực", remaining: 5 }),
+      ]),
+    );
     const next = await as(owner, "select public.control_run($1,'start',$2) as id", [roomId, questionId]);
     const nextRunId = String(next.rows[0].id);
     await expect(as(owner, "select public.configure_room_reward($1,false,null)", [roomId])).rejects.toThrow("Có thể thay đổi");
@@ -241,6 +253,11 @@ describe("SQL thực thi trong PostgreSQL PGlite (Auth/Realtime giả lập)", (
     const first = await as(player, "select public.spin_room_reward($1) as result", [ticket]);
     const second = await as(player, "select public.spin_room_reward($1) as result", [ticket]);
     expect(second.rows[0].result).toEqual(first.rows[0].result);
+    const afterSpin = await as(player, "select public.room_play_state($1) as state", [roomId]);
+    const spun = afterSpin.rows[0].state.reward_status.wheel.items.find(
+      (item: { label: string }) => item.label === first.rows[0].result.label,
+    );
+    expect(spun.remaining).toBe(4);
   });
   it("người khác không quay vòng riêng", async () =>
     await expect(

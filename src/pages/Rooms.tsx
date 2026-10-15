@@ -37,7 +37,7 @@ import {
   type RoomReward,
   type RewardStatus,
 } from "../lib/api";
-import { secondsLeft, type Theme } from "../lib/game";
+import { secondsLeft, wheelRotation, type Theme } from "../lib/game";
 type Member = {
   user_id: string;
   display_name: string;
@@ -314,6 +314,14 @@ export default function Rooms({
     run?.can_answer !== false &&
     !answered &&
     !busy;
+  const rewardWheelItems = rewardStatus?.wheel?.items || [];
+  const rewardWheelBackground = rewardWheelItems.length
+    ? `conic-gradient(${rewardWheelItems.map((item, index) => {
+      const start = (index * 360) / rewardWheelItems.length;
+      const end = ((index + 1) * 360) / rewardWheelItems.length;
+      return `${item.color} ${start}deg ${end}deg`;
+    }).join(", ")})`
+    : "conic-gradient(#04605e 0deg 72deg, #10aa8b 72deg 144deg, #f8a41e 144deg 216deg, #151b45 216deg 288deg, #cc3333 288deg 360deg)";
   async function create() {
     try {
       const { data, error } = await client()
@@ -417,7 +425,13 @@ export default function Rooms({
       const result = await rpc<{ label: string; color: string }>("spin_room_reward", {
         p_reward: rewardId,
       });
-      const rotation = 3600 + Math.floor(Math.random() * 360);
+      const target = rewardWheelItems.findIndex(
+        (item) => item.label === result.label && item.color === result.color,
+      );
+      const rotation = wheelRotation(
+        target < 0 ? 0 : target,
+        Math.max(1, rewardWheelItems.length),
+      );
       window.requestAnimationFrame(() =>
         setRewardSpin((current) => current && current.rewardId === rewardId
           ? { ...current, rotation }
@@ -429,6 +443,14 @@ export default function Rooms({
         setRewardStatus((previous) => previous ? {
           ...previous,
           available_count: Math.max(0, previous.available_count - 1),
+          wheel: previous.wheel ? {
+            ...previous.wheel,
+            items: previous.wheel.items.map((item) =>
+              item.label === result.label && item.color === result.color && item.remaining !== null
+                ? { ...item, remaining: Math.max(0, item.remaining - 1) }
+                : item,
+            ),
+          } : null,
           history: previous.history.map((item) => item.id === rewardId ? { ...item, state: "spun", label: result.label, color: result.color, spun_at: new Date().toISOString() } : item),
         } : previous);
         setRewardSpin({ rewardId, spinning: false, rotation, result });
@@ -499,7 +521,7 @@ export default function Rooms({
           </div>
         )}
       </PageTitle>
-      {!presentation && !isAnonymous && userId && (
+      {!presentation && !isAnonymous && userId && !room && (
         <div className="two-columns">
           <Card>
             <h2>Tổ chức trò chơi</h2>
@@ -851,6 +873,16 @@ export default function Rooms({
                     <p>Trả lời đúng nhanh nhất để nhận lượt quay!</p>
                   )}
                   {!!rewardStatus?.history.length && <div className="reward-history">{rewardStatus.history.map((item) => <span key={item.id} className={item.state}>{item.state === "spun" ? `Đã quay: ${item.label}` : "Lượt quay đang chờ"}</span>)}</div>}
+                  {!!rewardStatus?.wheel?.items.length && (
+                    <div className="reward-stock-list" aria-label="Phần thưởng còn lại">
+                      {rewardStatus.wheel.items.map((item) => (
+                        <span key={item.id}>
+                          <i style={{ background: item.color }} />
+                          {item.label} · {item.remaining === null ? "∞" : `còn ${item.remaining}`}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </section>
               )}
               {isOwner && !presentation && (
@@ -912,12 +944,25 @@ export default function Rooms({
                       disabled={!canConfigureReward || rewardSaving}
                       onChange={(e) => setRewardEnabled(e.target.checked)}
                     />
-                    Thưởng 1 lượt quay cho người trả lời đúng nhanh nhất mỗi câu
+                    <span>Thưởng 1 lượt quay cho người trả lời đúng nhanh nhất mỗi câu</span>
                   </label>
                   <Button disabled={!canConfigureReward || rewardSaving || (rewardEnabled && !rewardWheel)} onClick={() => void saveRewardConfig()}>
                     {rewardSaving ? "Đang lưu…" : "Lưu cấu hình thưởng"}
                   </Button>
                   {rewardMessage && <small className={"config-message " + (rewardMessageError ? "error" : "")}>{rewardMessage}</small>}
+                  {rewardStatus?.wheel && (
+                    <div className="room-reward-stock" aria-live="polite">
+                      <strong>Tồn kho phần thưởng trong phòng</strong>
+                      <div>
+                        {rewardStatus.wheel.items.map((item) => (
+                          <span key={item.id} title={`${item.label}: ${item.remaining === null ? "không giới hạn" : `còn ${item.remaining}`}`}>
+                            <i style={{ background: item.color }} />
+                            {item.label} · {item.remaining === null ? "∞" : `còn ${item.remaining}`}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   </div>
                   <select
                     aria-label="Chọn câu"
@@ -1080,8 +1125,21 @@ export default function Rooms({
               <div className="wheel-pointer" />
               <div
                 className="reward-spin-wheel"
-                style={{ transform: `rotate(${rewardSpin.rotation}deg)` }}
+                style={{ transform: `rotate(${rewardSpin.rotation}deg)`, background: rewardWheelBackground }}
               >
+                {rewardWheelItems.map((item, index) => {
+                  const angle = ((index + 0.5) * 360) / rewardWheelItems.length;
+                  return (
+                    <span
+                      className="reward-spin-label"
+                      key={item.id}
+                      title={`${item.label} · ${item.remaining === null ? "không giới hạn" : `còn ${item.remaining}`}`}
+                      style={{ transform: `rotate(${angle}deg) translateY(-112px) rotate(${90 - angle}deg)` }}
+                    >
+                      {item.label}
+                    </span>
+                  );
+                })}
                 <div className="reward-spin-center"><Gift size={35} /></div>
               </div>
             </div>
