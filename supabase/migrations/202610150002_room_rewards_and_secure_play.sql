@@ -171,7 +171,10 @@ end $$;
 
 -- Direct table reads were leaking correct/score through the Realtime payload.
 drop policy if exists submissions_read on public.submissions;
-create policy submissions_read_safe on public.submissions for select to authenticated using(user_id=auth.uid() or exists(select 1 from public.rooms r join public.runs rr on rr.room_id=r.id where rr.id=run_id and r.owner_id=auth.uid()));
+create policy submissions_read_safe on public.submissions for select to authenticated using(
+  exists(select 1 from public.rooms r join public.runs rr on rr.room_id=r.id where rr.id=run_id and r.owner_id=auth.uid())
+  or (user_id=auth.uid() and exists(select 1 from public.runs rr where rr.id=run_id and rr.state='revealed'))
+);
 grant execute on function public.configure_room_reward(uuid,boolean,uuid),public.validate_room_invitation(text),public.duplicate_room(uuid,text),public.delete_room(uuid),public.spin_room_reward(uuid),public.room_play_state(uuid),public.control_run(uuid,text,uuid,integer) to authenticated;
 grant update(reward_fastest_enabled,reward_wheel_id) on public.rooms to authenticated;
 alter publication supabase_realtime add table public.run_rewards;
