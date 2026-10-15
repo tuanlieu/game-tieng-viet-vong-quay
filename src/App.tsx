@@ -35,6 +35,7 @@ import {
   client,
   download,
   consumeAuthCallback,
+  startGuestSession,
 } from "./lib/api";
 import { themes, type Theme } from "./lib/game";
 import {
@@ -95,7 +96,9 @@ function initialTheme() {
   return themes[0];
 }
 export default function App() {
-  const [page, setPage] = useState<Page>("overview"),
+  const [page, setPage] = useState<Page>(
+    location.hash.startsWith("#join=") ? "rooms" : "overview",
+  ),
     [session, setSession] = useState<Session | null>(null),
     [role, setRole] = useState("guest"),
     [mustChange, setMustChange] = useState(false),
@@ -187,6 +190,9 @@ export default function App() {
       alive = false;
       data.subscription.unsubscribe();
     };
+  }, []);
+  useEffect(() => {
+    if (location.hash.startsWith("#join=")) setPage("rooms");
   }, []);
   useEffect(() => {
     const online = () => setConnected(true),
@@ -302,6 +308,39 @@ export default function App() {
         ]
       : []),
   ];
+  // The public surface is intentionally a game entry point, not a trimmed
+  // dashboard. Organiser tools are only rendered after a non-anonymous login.
+  if (!session || isAnonymous) {
+    return (
+      <div className="guest-app">
+        {toast && <div className="toast guest-toast" role="alert"><span>{toast}</span><button onClick={() => setToast("")} aria-label="Đóng thông báo"><X size={16} /></button></div>}
+        {page === "rooms" ? (
+          <main className="guest-room-shell">
+            <Rooms userId={session?.user.id} isAnonymous notify={setToast} onActivity={setActive} onTheme={setRoomScope} />
+            <button className="organiser-link" onClick={() => go("login")}>Dành cho người tổ chức</button>
+          </main>
+        ) : page === "login" ? (
+          <main className="guest-auth-shell"><Auth notify={setToast} /><button className="organiser-link" onClick={() => go("overview")}>← Quay lại tham gia chơi</button></main>
+        ) : (
+          <GuestLanding
+            initialCode={quickCode}
+            onJoin={async (raw) => {
+              const found = raw.match(/#join=([A-Za-z0-9]{1,32})/i);
+              const code = (found?.[1] || raw.trim()).toUpperCase();
+              if (!/^[A-Z0-9]{4,8}$/.test(code)) throw new Error("Nhập mã phòng hợp lệ hoặc dán đúng link mời.");
+              await startGuestSession("Người chơi");
+              await rpc("validate_room_invitation", { p_code: code });
+              sessionStorage.setItem("game-guest-code", code);
+              location.hash = "#join=" + code;
+              setQuickCode(code);
+              go("rooms");
+            }}
+            onOrganiser={() => go("login")}
+          />
+        )}
+      </div>
+    );
+  }
   return (
     <div className={"app-shell " + (compact ? "compact" : "")}>
       <a className="skip-link" href="#main">
@@ -763,6 +802,36 @@ export default function App() {
         </footer>
       </div>
     </div>
+  );
+}
+function GuestLanding({
+  initialCode,
+  onJoin,
+  onOrganiser,
+}: {
+  initialCode: string;
+  onJoin: (value: string) => Promise<void>;
+  onOrganiser: () => void;
+}) {
+  const [value, setValue] = useState(initialCode);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <main className="guest-landing">
+      <div className="guest-brand"><span>V</span><div><strong>GAME TIẾNG VIỆT</strong><small>VÒNG QUAY MAY MẮN</small></div></div>
+      <section className="join-panel">
+        <span className="guest-kicker">VÀO CHƠI NGAY</span>
+        <h1>Tham gia phòng chơi</h1>
+        <p>Không cần tài khoản. Nhập mã phòng và tên của bạn để bắt đầu!</p>
+        <form onSubmit={(e) => { e.preventDefault(); setBusy(true); setError(""); void onJoin(value).catch((err) => setError(errorText(err))).finally(() => setBusy(false)); }}>
+          <label htmlFor="guest-code">Nhập mã phòng hoặc dán link phòng</label>
+          <input id="guest-code" autoFocus required value={value} onChange={(e) => setValue(e.target.value)} placeholder="Ví dụ: A1B2C3D4 hoặc link mời" />
+          {error && <p className="join-error" role="alert">{error}</p>}
+          <Button type="submit" kind="yellow" disabled={busy}><Play size={18} /> {busy ? "Đang kiểm tra…" : "Tham gia"}</Button>
+        </form>
+      </section>
+      <button className="organiser-link" onClick={onOrganiser}>Dành cho người tổ chức</button>
+    </main>
   );
 }
 function Metric({
