@@ -24,6 +24,28 @@ export function client() {
   return db;
 }
 
+/**
+ * Give a walk-in player a Supabase anonymous session.  This is not an
+ * account: it needs no email or password, but gives the database a safe,
+ * per-browser identity so answers and scores cannot overwrite each other.
+ */
+export async function startGuestSession(displayName: string) {
+  const cleanName = displayName.trim();
+  if (cleanName.length < 2 || cleanName.length > 30)
+    throw new Error("Nhập tên người chơi hoặc tên đội (2–30 ký tự).");
+  const supabase = client();
+  const { data: existing, error: existingError } =
+    await supabase.auth.getSession();
+  if (existingError) throw existingError;
+  if (existing.session) return existing.session;
+  const { data, error } = await supabase.auth.signInAnonymously({
+    options: { data: { display_name: cleanName } },
+  });
+  if (error) throw error;
+  if (!data.session) throw new Error("Không thể tạo phiên khách. Hãy thử lại.");
+  return data.session;
+}
+
 /** Store a session returned by OAuth or an email-confirmation link. */
 export async function consumeAuthCallback() {
   if (!db || typeof window === "undefined") return;
@@ -91,6 +113,7 @@ export type Room = {
   locked: boolean;
   max_members: number;
   theme_id: string | null;
+  late_join_enabled: boolean;
 };
 export type Run = {
   id: string;
@@ -106,6 +129,7 @@ export type Run = {
   hint: string;
   server_now: string;
   revealed?: { answer: string; explanation: string };
+  can_answer?: boolean;
 };
 export async function listSets() {
   const { data, error } = await client()
