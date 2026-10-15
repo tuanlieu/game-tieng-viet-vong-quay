@@ -114,6 +114,8 @@ export type Room = {
   max_members: number;
   theme_id: string | null;
   late_join_enabled: boolean;
+  reward_fastest_enabled: boolean;
+  reward_wheel_id: string | null;
 };
 export type Run = {
   id: string;
@@ -130,6 +132,34 @@ export type Run = {
   server_now: string;
   revealed?: { answer: string; explanation: string };
   can_answer?: boolean;
+};
+export type PlayMember = {
+  user_id: string;
+  display_name: string;
+  team_name: string | null;
+  last_seen_at: string;
+  score: number;
+};
+export type MySubmission = {
+  submitted: boolean;
+  answer: string;
+  correct: boolean | null;
+  score: number | null;
+};
+export type RoomReward = {
+  id: string;
+  run_id: string;
+  winner: string;
+  state: "available" | "spun" | "void";
+  mine: boolean;
+  label: string | null;
+  color: string | null;
+};
+export type PlayState = {
+  run: Run | null;
+  members: PlayMember[];
+  my_submission: MySubmission | null;
+  reward: RoomReward | null;
 };
 export async function listSets() {
   const { data, error } = await client()
