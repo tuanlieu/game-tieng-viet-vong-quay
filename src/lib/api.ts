@@ -13,13 +13,28 @@ export const db = configured
         flowType: "implicit",
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        // Consume the returned fragment explicitly in App.tsx. This is more
+        // reliable when a confirmation link opens in Gmail/Safari.
+        detectSessionInUrl: false,
       },
     })
   : null;
 export function client() {
   if (!db) throw new Error("Chưa kết nối Supabase. Xem Hướng dẫn để cấu hình.");
   return db;
+}
+
+/** Store a session returned by OAuth or an email-confirmation link. */
+export async function consumeAuthCallback() {
+  if (!db || typeof window === "undefined") return;
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const access_token = params.get("access_token");
+  const refresh_token = params.get("refresh_token");
+  if (!access_token || !refresh_token) return;
+  const { error } = await db.auth.setSession({ access_token, refresh_token });
+  if (error) throw error;
+  // Never keep session credentials in the visible URL/history.
+  window.history.replaceState({}, document.title, window.location.pathname);
 }
 export async function rpc<T>(
   name: string,
