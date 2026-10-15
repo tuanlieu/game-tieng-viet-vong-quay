@@ -173,6 +173,7 @@ end $$;
 
 -- Direct table reads were leaking correct/score through the Realtime payload.
 drop policy if exists submissions_read on public.submissions;
+drop policy if exists submissions_read_safe on public.submissions;
 create policy submissions_read_safe on public.submissions for select to authenticated using(
   exists(select 1 from public.rooms r join public.runs rr on rr.room_id=r.id where rr.id=run_id and r.owner_id=auth.uid())
   or (user_id=auth.uid() and exists(select 1 from public.runs rr where rr.id=run_id and rr.state='revealed'))
