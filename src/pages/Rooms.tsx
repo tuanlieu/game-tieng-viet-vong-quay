@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Play,
   Pause,
@@ -10,11 +10,13 @@ import {
   Copy,
   Eye,
   Download,
+  Gift,
 } from "lucide-react";
 import {
   Button,
   Card,
   Field,
+  Modal,
   PageTitle,
   Empty,
   errorText,
@@ -33,6 +35,7 @@ import {
   type PlayState,
   type MySubmission,
   type RoomReward,
+  type RewardStatus,
 } from "../lib/api";
 import { secondsLeft, type Theme } from "../lib/game";
 type Member = {
@@ -67,7 +70,9 @@ export default function Rooms({
   })();
   const [rooms, setRooms] = useState<Room[]>([]),
     [sets, setSets] = useState<SetRecord[]>([]),
-    [selected, setSelected] = useState(savedGuest?.roomId || ""),
+    [selected, setSelected] = useState(
+      savedGuest?.roomId || sessionStorage.getItem("game-room-selection") || "",
+    ),
     [title, setTitle] = useState(""),
     [setId, setSetId] = useState(""),
     [code, setCode] = useState(
@@ -81,6 +86,7 @@ export default function Rooms({
     [members, setMembers] = useState<Member[]>([]),
     [mySubmission, setMySubmission] = useState<MySubmission | null>(null),
     [roomReward, setRoomReward] = useState<RoomReward | null>(null),
+    [rewardStatus, setRewardStatus] = useState<RewardStatus | null>(null),
     [questions, setQuestions] = useState<Question[]>([]),
     [questionId, setQuestionId] = useState(""),
     [chosen, setChosen] = useState<number[]>([]),
@@ -92,9 +98,30 @@ export default function Rooms({
     [presentation, setPresentation] = useState(false);
   const [savedThemes, setSavedThemes] = useState<Theme[]>([]),
     [myWheels, setMyWheels] = useState<Wheel[]>([]),
-    [rewardWheel, setRewardWheel] = useState("");
+    [rewardWheel, setRewardWheel] = useState(""),
+    [rewardEnabled, setRewardEnabled] = useState(false),
+    [rewardSaving, setRewardSaving] = useState(false),
+    [rewardMessage, setRewardMessage] = useState(""),
+    [rewardMessageError, setRewardMessageError] = useState(false);
+  const [answerPopupRunId, setAnswerPopupRunId] = useState<string | null>(null);
+  const [rewardSpin, setRewardSpin] = useState<{
+    rewardId: string;
+    spinning: boolean;
+    rotation: number;
+    result: { label: string; color: string } | null;
+  } | null>(null);
+  const revealedRunRef = useRef<string | null>(null);
   const room = rooms.find((r) => r.id === selected);
   const isOwner = !!userId && !isAnonymous && room?.owner_id === userId;
+  const rewardDirty = Boolean(
+    isOwner && room &&
+      (rewardEnabled !== Boolean(room.reward_fastest_enabled) ||
+        rewardWheel !== (room.reward_wheel_id || "")),
+  );
+  function chooseRoom(nextRoomId: string) {
+    if (nextRoomId !== selected && rewardDirty && !confirm("Cấu hình thưởng chưa được lưu. Đổi phòng sẽ bỏ các thay đổi này?")) return;
+    setSelected(nextRoomId);
+  }
   async function loadRooms() {
     try {
       const { data, error } = await client()
@@ -145,6 +172,7 @@ export default function Rooms({
         setMembers(state.members);
         setMySubmission(state.my_submission);
         setRoomReward(state.reward);
+        setRewardStatus(state.reward_status);
         if (state.run)
           setOffset(Date.parse(state.run.server_now) - (sent + Date.now()) / 2);
         await loadRooms();
@@ -156,6 +184,11 @@ export default function Rooms({
     }
     void refresh();
     const timer = setInterval(() => void refresh(), 4000);
+    const resume = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("online", resume);
     const channel = client()
       .channel("room:" + selected)
       .on(
@@ -193,6 +226,8 @@ export default function Rooms({
     return () => {
       alive = false;
       clearInterval(timer);
+      document.removeEventListener("visibilitychange", resume);
+      window.removeEventListener("online", resume);
       void client().removeChannel(channel);
       onTheme(null);
     };
@@ -208,6 +243,9 @@ export default function Rooms({
     return () => clearInterval(timer);
   }, [selected, userId, isOwner]);
   useEffect(() => {
+    if (selected) sessionStorage.setItem("game-room-selection", selected);
+  }, [selected]);
+  useEffect(() => {
     const timer = setInterval(() => setTick((n) => n + 1), 250);
     return () => clearInterval(timer);
   }, []);
@@ -216,6 +254,24 @@ export default function Rooms({
     setTyped("");
     setHint("");
   }, [run?.id]);
+  useEffect(() => {
+    if (run?.state === "revealed") notify("");
+  }, [run?.state]);
+  useEffect(() => {
+    if (run?.state !== "revealed") {
+      setAnswerPopupRunId(null);
+      return;
+    }
+    if (revealedRunRef.current !== run.id) {
+      revealedRunRef.current = run.id;
+      setAnswerPopupRunId(run.id);
+    }
+  }, [run?.id, run?.state]);
+  useEffect(() => {
+    if (!answerPopupRunId) return;
+    const timer = window.setTimeout(() => setAnswerPopupRunId(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [answerPopupRunId]);
   useEffect(() => {
     const active = run?.state === "running" || run?.state === "paused";
     onActivity(active);
@@ -240,8 +296,12 @@ export default function Rooms({
       });
   }, [room?.set_id, isOwner]);
   useEffect(() => {
-    if (room?.reward_wheel_id) setRewardWheel(room.reward_wheel_id);
-  }, [room?.reward_wheel_id]);
+    if (!room) return;
+    setRewardWheel(room.reward_wheel_id || "");
+    setRewardEnabled(Boolean(room.reward_fastest_enabled));
+    setRewardMessage("");
+    setRewardMessageError(false);
+  }, [room?.id, room?.reward_wheel_id, room?.reward_fastest_enabled]);
   const left =
     run?.state === "paused"
       ? Math.ceil(run.remaining)
@@ -348,44 +408,96 @@ export default function Rooms({
       notify(errorText(e));
     }
   }
-  async function spinReward() {
-    if (!roomReward?.mine || roomReward.state !== "available") return;
+  const availableReward = rewardStatus?.history.find((item) => item.state === "available");
+  async function spinReward(rewardId = availableReward?.id || (roomReward?.mine ? roomReward.id : undefined)) {
+    if (!rewardId || rewardSpin) return;
     setBusy(true);
+    setRewardSpin({ rewardId, spinning: true, rotation: 0, result: null });
     try {
       const result = await rpc<{ label: string; color: string }>("spin_room_reward", {
-        p_reward: roomReward.id,
+        p_reward: rewardId,
       });
-      setRoomReward({ ...roomReward, state: "spun", label: result.label, color: result.color });
-      notify(`🎉 Bạn đã quay được: ${result.label}`);
+      const rotation = 3600 + Math.floor(Math.random() * 360);
+      window.requestAnimationFrame(() =>
+        setRewardSpin((current) => current && current.rewardId === rewardId
+          ? { ...current, rotation }
+          : current),
+      );
+      window.setTimeout(() => {
+        if (roomReward?.id === rewardId)
+          setRoomReward({ ...roomReward, state: "spun", label: result.label, color: result.color });
+        setRewardStatus((previous) => previous ? {
+          ...previous,
+          available_count: Math.max(0, previous.available_count - 1),
+          history: previous.history.map((item) => item.id === rewardId ? { ...item, state: "spun", label: result.label, color: result.color, spun_at: new Date().toISOString() } : item),
+        } : previous);
+        setRewardSpin({ rewardId, spinning: false, rotation, result });
+        setBusy(false);
+        notify(`🎉 Bạn đã quay được: ${result.label}`);
+      }, 10000);
     } catch (e) {
-      notify(errorText(e));
-    } finally {
+      setRewardSpin(null);
       setBusy(false);
+      notify(errorText(e));
     }
   }
+  async function saveRewardConfig() {
+    if (!room) return;
+    setRewardSaving(true);
+    setRewardMessage("");
+    setRewardMessageError(false);
+    try {
+      await rpc("configure_room_reward", {
+        p_room: room.id,
+        p_enabled: rewardEnabled,
+        p_wheel: rewardEnabled ? rewardWheel || null : null,
+      });
+      await loadRooms();
+      setRewardMessage("Đã lưu cấu hình thưởng cho các câu tiếp theo.");
+    } catch (e) {
+      setRewardEnabled(Boolean(room.reward_fastest_enabled));
+      setRewardWheel(room.reward_wheel_id || "");
+      setRewardMessage(errorText(e));
+      setRewardMessageError(true);
+    } finally {
+      setRewardSaving(false);
+    }
+  }
+  const canConfigureReward = !run || run.state === "revealed";
   const scores = [...members].sort((a, b) => b.score - a.score || a.display_name.localeCompare(b.display_name));
   return (
     <div className={presentation ? "presentation" : ""}>
       <PageTitle
-        title="Phòng chơi"
-        description="Một mã phòng. Nhiều người chơi. Chung một niềm vui."
+        title={room ? "Phòng của bạn" : "Phòng chơi"}
+        description={room ? "Sẵn sàng trả lời câu hỏi và nhận phần thưởng." : "Một mã phòng. Nhiều người chơi. Chung một niềm vui."}
       >
-        <Button
-          kind="outline"
-          onClick={() => {
-            setPresentation(!presentation);
-            if (!document.fullscreenElement)
-              void document.documentElement
-                .requestFullscreen()
-                .catch(() =>
-                  notify("Trình duyệt không cho phép toàn màn hình."),
-                );
-            else void document.exitFullscreen();
-          }}
-        >
-          <Maximize2 size={16} />
-          {presentation ? "Thoát trình chiếu" : "Trình chiếu"}
-        </Button>
+        {!isAnonymous && userId && (
+          <div className="room-toolbar">
+            <label className="room-picker">
+              <span>Chọn phòng của bạn</span>
+              <select value={selected} onChange={(e) => chooseRoom(e.target.value)}>
+                <option value="">Chọn phòng</option>
+                {rooms.map((r) => <option key={r.id} value={r.id}>{r.title} · {r.code}</option>)}
+              </select>
+            </label>
+            <Button
+              kind="outline"
+              onClick={() => {
+                setPresentation(!presentation);
+                if (!document.fullscreenElement)
+                  void document.documentElement
+                    .requestFullscreen()
+                    .catch(() =>
+                      notify("Trình duyệt không cho phép toàn màn hình."),
+                    );
+                else void document.exitFullscreen();
+              }}
+            >
+              <Maximize2 size={16} />
+              {presentation ? "Thoát trình chiếu" : "Trình chiếu"}
+            </Button>
+          </div>
+        )}
       </PageTitle>
       {!presentation && !isAnonymous && userId && (
         <div className="two-columns">
@@ -467,7 +579,7 @@ export default function Rooms({
           </Card>
         </div>
       )}
-      {!presentation && (isAnonymous || !userId) && (
+      {!presentation && (isAnonymous || !userId) && !room && !(isAnonymous && savedGuest?.roomId === selected) && (
         <Card className="guest-join-card">
           <span className="eyebrow">VÀO CHƠI NGAY</span>
           <h2>{code ? "Nhập tên để vào phòng" : "Chỉ cần mã phòng và tên của bạn"}</h2>
@@ -504,21 +616,6 @@ export default function Rooms({
             </Button>
           </form>
         </Card>
-      )}
-      {!presentation && userId && (
-        <Field label="Phòng của bạn">
-          <select
-            value={selected}
-            onChange={(e) => setSelected(e.target.value)}
-          >
-            <option value="">Chọn phòng</option>
-            {rooms.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.title} · {r.code}
-              </option>
-            ))}
-          </select>
-        </Field>
       )}
       {room && (
         <>
@@ -727,28 +824,14 @@ export default function Rooms({
                       Đã gửi câu trả lời: <strong>{mySubmission?.answer}</strong>. Kết quả được lưu trên server.
                     </div>
                   )}
-                  {run.revealed && (
-                    <div className="revealed">
-                      <small>ĐÁP ÁN</small>
-                      <h2>{run.revealed.answer}</h2>
-                      <p>{run.revealed.explanation}</p>
-                      {mySubmission ? (
-                        <p className={mySubmission.correct ? "result-good" : "result-bad"}>
-                          Câu trả lời của bạn: <strong>{mySubmission.answer}</strong> · {mySubmission.correct ? `Đúng, +${mySubmission.score} điểm` : "Chưa đúng"}
-                        </p>
-                      ) : (
-                        <p>Bạn chưa gửi câu trả lời.</p>
-                      )}
-                    </div>
-                  )}
                   {roomReward && run.revealed && (
                     <div className={"reward-banner " + (roomReward.state === "spun" ? "spun" : "")}>
                       {roomReward.state === "spun" ? (
                         <><strong>🎊 {roomReward.winner} đã quay được {roomReward.label}</strong><span style={{ background: roomReward.color || "#F8A41E" }} /></>
                       ) : (
                         <>
-                          <strong>🎉 {roomReward.winner} trả lời đúng nhanh nhất và nhận 1 lượt quay may mắn!</strong>
-                          {roomReward.mine && <Button disabled={busy} onClick={() => void spinReward()}><Play size={16} /> Quay ngay</Button>}
+                          <strong>{roomReward.mine ? "🎉 Bạn trả lời đúng nhanh nhất! Bạn được tặng 1 lượt quay." : `🎉 ${roomReward.winner} trả lời đúng nhanh nhất và nhận 1 lượt quay may mắn!`}</strong>
+                          {roomReward.mine && <div className="actions"><Button disabled={busy} onClick={() => void spinReward(roomReward.id)}><Play size={16} /> Quay ngay</Button><Button kind="outline" onClick={() => notify("Lượt quay đã được giữ lại để bạn dùng sau.")}>Để sau</Button></div>}
                         </>
                       )}
                     </div>
@@ -756,6 +839,19 @@ export default function Rooms({
                 </>
               ) : (
                 <Empty message="Mời người chơi vào phòng rồi bắt đầu câu đầu tiên." />
+              )}
+              {!isOwner && (
+                <section className="player-rewards" aria-label="Quay thưởng">
+                  <div className="player-reward-heading"><span>🎁</span><div><small>QUAY THƯỞNG</small><h3>Quay thưởng</h3></div><b>{rewardStatus?.available_count || 0} lượt</b></div>
+                  {!rewardStatus?.enabled ? (
+                    <p>Phòng chưa bật thưởng quay.</p>
+                  ) : (rewardStatus.available_count || 0) > 0 ? (
+                    <div className="reward-ready"><strong>Bạn có {rewardStatus.available_count} lượt quay</strong><Button disabled={busy || !availableReward} onClick={() => void spinReward(availableReward?.id)}><Gift size={16} /> Quay ngay</Button></div>
+                  ) : (
+                    <p>Trả lời đúng nhanh nhất để nhận lượt quay!</p>
+                  )}
+                  {!!rewardStatus?.history.length && <div className="reward-history">{rewardStatus.history.map((item) => <span key={item.id} className={item.state}>{item.state === "spun" ? `Đã quay: ${item.label}` : "Lượt quay đang chờ"}</span>)}</div>}
+                </section>
               )}
               {isOwner && !presentation && (
                 <div className="mc-panel">
@@ -790,9 +886,15 @@ export default function Rooms({
                       ? "Tắt tham gia muộn"
                       : "Cho phép tham gia muộn"}
                   </Button>
-                  <Field label="Vòng quay cấp lượt cho thành viên">
+                  <div className="reward-settings">
+                    <div className="reward-settings-head">
+                      <div><strong>Thưởng vòng quay</strong><small>{room.reward_fastest_enabled ? "Đang bật" : "Đang tắt"}</small></div>
+                      {!canConfigureReward && <small>Có thể thay đổi sau khi kết thúc câu hiện tại.</small>}
+                    </div>
+                  <Field label="Vòng quay đang dùng">
                     <select
                       value={rewardWheel}
+                      disabled={!canConfigureReward || rewardSaving}
                       onChange={(e) => setRewardWheel(e.target.value)}
                     >
                       <option value="">Chọn vòng quay của MC</option>
@@ -806,19 +908,17 @@ export default function Rooms({
                   <label className="switch-row">
                     <input
                       type="checkbox"
-                      checked={Boolean(room.reward_fastest_enabled)}
-                      onChange={(e) =>
-                        void rpc("configure_room_reward", {
-                          p_room: selected,
-                          p_enabled: e.target.checked,
-                          p_wheel: e.target.checked ? rewardWheel || null : null,
-                        })
-                          .then(() => loadRooms())
-                          .catch((err) => notify(errorText(err)))
-                      }
+                      checked={rewardEnabled}
+                      disabled={!canConfigureReward || rewardSaving}
+                      onChange={(e) => setRewardEnabled(e.target.checked)}
                     />
                     Thưởng 1 lượt quay cho người trả lời đúng nhanh nhất mỗi câu
                   </label>
+                  <Button disabled={!canConfigureReward || rewardSaving || (rewardEnabled && !rewardWheel)} onClick={() => void saveRewardConfig()}>
+                    {rewardSaving ? "Đang lưu…" : "Lưu cấu hình thưởng"}
+                  </Button>
+                  {rewardMessage && <small className={"config-message " + (rewardMessageError ? "error" : "")}>{rewardMessage}</small>}
+                  </div>
                   <select
                     aria-label="Chọn câu"
                     value={questionId}
@@ -930,7 +1030,7 @@ export default function Rooms({
                 </div>
               ))}
               {!members.length && <Empty message="Chưa có người chơi." />}
-              <Button
+              {isOwner && <Button
                 kind="outline"
                 onClick={() =>
                   download(
@@ -945,14 +1045,58 @@ export default function Rooms({
               >
                 <Download size={16} />
                 Xuất kết quả
-              </Button>
-              <small>
-                Điểm đội hiện hiển thị theo thành viên; tổng hợp theo đội chưa
-                sẵn sàng.
-              </small>
+              </Button>}
+              {isOwner && <small>Điểm đội hiện hiển thị theo thành viên.</small>}
             </Card>
           </div>
         </>
+      )}
+      {answerPopupRunId === run?.id && run?.revealed && (
+        <Modal title="Kết quả câu hỏi" onClose={() => setAnswerPopupRunId(null)}>
+          <div className="answer-popup">
+            <small>ĐÁP ÁN</small>
+            <h2>{run.revealed.answer}</h2>
+            {run.revealed.explanation && <p>{run.revealed.explanation}</p>}
+            {mySubmission ? (
+              <p className={mySubmission.correct ? "result-good" : "result-bad"}>
+                Câu trả lời của bạn: <strong>{mySubmission.answer}</strong> · {mySubmission.correct ? `Đúng, +${mySubmission.score} điểm` : "Chưa đúng"}
+              </p>
+            ) : (
+              <p>Bạn chưa gửi câu trả lời.</p>
+            )}
+            <small className="popup-countdown">Tự đóng sau vài giây</small>
+          </div>
+        </Modal>
+      )}
+      {rewardSpin && (
+        <Modal
+          title="🎁 Vòng quay may mắn"
+          onClose={() => {
+            if (!rewardSpin.spinning) setRewardSpin(null);
+          }}
+        >
+          <div className="reward-spin-popup">
+            <div className="reward-spin-wheel-wrap" aria-label="Vòng quay phần thưởng">
+              <div className="wheel-pointer" />
+              <div
+                className="reward-spin-wheel"
+                style={{ transform: `rotate(${rewardSpin.rotation}deg)` }}
+              >
+                <div className="reward-spin-center"><Gift size={35} /></div>
+              </div>
+            </div>
+            {rewardSpin.spinning ? (
+              <><strong>Vòng quay đang chọn phần thưởng cho bạn…</strong><p>Xin chờ trong 10 giây.</p></>
+            ) : (
+              <div className="reward-spin-result">
+                <small>CHÚC MỪNG BẠN NHẬN ĐƯỢC</small>
+                <h2>{rewardSpin.result?.label}</h2>
+                <span style={{ background: rewardSpin.result?.color || "#F8A41E" }} />
+                <Button onClick={() => setRewardSpin(null)}>Hoàn tất</Button>
+              </div>
+            )}
+          </div>
+        </Modal>
       )}
     </div>
   );

@@ -53,6 +53,8 @@ import Wheels from "./pages/Wheels";
 import Themes from "./pages/Themes";
 import Profile, { UsersAdmin } from "./pages/Profile";
 const NAME = "Game Tiếng Việt - Vòng Quay May Mắn";
+const sessionGet = (key: string) =>
+  typeof sessionStorage === "undefined" ? null : sessionStorage.getItem(key);
 type Page =
   | "overview"
   | "questions"
@@ -97,7 +99,9 @@ function initialTheme() {
 }
 export default function App() {
   const [page, setPage] = useState<Page>(
-    location.hash.startsWith("#join=") ? "rooms" : "overview",
+    location.hash.startsWith("#join=")
+      ? "rooms"
+      : ((sessionGet("game-last-page") as Page | null) || "overview"),
   ),
     [session, setSession] = useState<Session | null>(null),
     [role, setRole] = useState("guest"),
@@ -111,7 +115,10 @@ export default function App() {
     [active, setActive] = useState(false),
     [roomScope, setRoomScope] = useState<string | null>(null),
     [connected, setConnected] = useState(navigator.onLine),
-    [counts, setCounts] = useState({ sets: 0, rooms: 0, wheels: 0 });
+    [counts, setCounts] = useState({ sets: 0, rooms: 0, wheels: 0 }),
+    // SSR/test rendering has no browser session to restore. In a real browser
+    // we intentionally wait before deciding whether to show the guest entry.
+    [authReady, setAuthReady] = useState(!configured || typeof document === "undefined");
   const [quickCode, setQuickCode] = useState(
     location.hash.startsWith("#join=") ? location.hash.slice(6, 14) : "",
   );
@@ -130,6 +137,7 @@ export default function App() {
     : "Khách tham quan";
   function go(p: Page) {
     setPage(p);
+    if (typeof sessionStorage !== "undefined") sessionStorage.setItem("game-last-page", p);
     setDrawer(false);
   }
   function goToGuestRoom() {
@@ -157,6 +165,7 @@ export default function App() {
       if (!s) {
         setRole("guest");
         setMustChange(false);
+        setAuthReady(true);
         return;
       }
       try {
@@ -169,6 +178,8 @@ export default function App() {
         }
       } catch (e) {
         setToast(errorText(e));
+      } finally {
+        if (alive) setAuthReady(true);
       }
     }
     void consumeAuthCallback()
@@ -181,9 +192,7 @@ export default function App() {
       if (event === "PASSWORD_RECOVERY") {
         setPage("profile");
       }
-      if (s && event === "SIGNED_IN") {
-        setPage(location.hash.startsWith("#join=") ? "rooms" : "overview");
-      }
+      if (s && event === "SIGNED_IN" && location.hash.startsWith("#join=")) setPage("rooms");
       setTimeout(() => void update(s), 0);
     });
     return () => {
@@ -308,6 +317,9 @@ export default function App() {
         ]
       : []),
   ];
+  if (!authReady) {
+    return <main className="session-restoring" role="status">Đang khôi phục phiên…</main>;
+  }
   // The public surface is intentionally a game entry point, not a trimmed
   // dashboard. Organiser tools are only rendered after a non-anonymous login.
   if (!session || isAnonymous) {
@@ -317,7 +329,6 @@ export default function App() {
         {page === "rooms" ? (
           <main className="guest-room-shell">
             <Rooms userId={session?.user.id} isAnonymous notify={setToast} onActivity={setActive} onTheme={setRoomScope} />
-            <button className="organiser-link" onClick={() => go("login")}>Dành cho người tổ chức</button>
           </main>
         ) : page === "login" ? (
           <main className="guest-auth-shell"><Auth notify={setToast} /><button className="organiser-link" onClick={() => go("overview")}>← Quay lại tham gia chơi</button></main>

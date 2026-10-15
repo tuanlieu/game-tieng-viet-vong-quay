@@ -30,7 +30,11 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
     [questions, setQuestions] = useState<Question[]>([]),
     [authors, setAuthors] = useState<Author[]>([]),
     [setTitle, setSetTitle] = useState(""),
-    [search, setSearch] = useState("");
+    [search, setSearch] = useState(""),
+    [selectedIds, setSelectedIds] = useState<string[]>([]),
+    [bulkDuration, setBulkDuration] = useState(""),
+    [bulkPoints, setBulkPoints] = useState(""),
+    [bulkBusy, setBulkBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null),
     [answer, setAnswer] = useState(""),
     [tileText, setTileText] = useState(""),
@@ -72,6 +76,7 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
   useEffect(() => {
     void loadQuestions();
     reset();
+    setSelectedIds([]);
   }, [selected]);
   function reset() {
     setEditing(null);
@@ -80,6 +85,40 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
     setHint("");
     setExplanation("");
     setAlternatives("");
+  }
+  const filteredQuestions = questions.filter((q) =>
+    (authors.find((a) => a.question_id === q.id)?.answer + q.tiles.join(""))
+      .toLocaleLowerCase("vi")
+      .includes(search.toLocaleLowerCase("vi")),
+  );
+  function toggleSelected(id: string) {
+    setSelectedIds((ids) => ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
+  }
+  async function bulkUpdate(remove = false) {
+    if (!selectedIds.length) return;
+    const durationValue = bulkDuration === "" ? null : Number(bulkDuration);
+    const pointsValue = bulkPoints === "" ? null : Number(bulkPoints);
+    const summary = remove
+      ? `Xóa ${selectedIds.length} câu hỏi? Thao tác không thể hoàn tác.`
+      : `Cập nhật ${selectedIds.length} câu${durationValue !== null ? `: thời gian ${durationValue} giây` : ""}${pointsValue !== null ? `${durationValue !== null ? "," : ":"} điểm ${pointsValue}` : ""}.`;
+    if (!confirm(summary)) return;
+    setBulkBusy(true);
+    try {
+      const result = await rpc<{ changed: number }>("bulk_update_questions", {
+        p_set: selected,
+        p_questions: selectedIds,
+        p_duration: durationValue,
+        p_points: pointsValue,
+        p_delete: remove,
+      });
+      setSelectedIds([]);
+      await loadQuestions();
+      notify(remove ? `Đã xóa ${result.changed} câu hỏi.` : `Đã cập nhật ${result.changed} câu hỏi.`);
+    } catch (e) {
+      notify(errorText(e));
+    } finally {
+      setBulkBusy(false);
+    }
   }
   async function setVisibility(value: string) {
     try {
@@ -164,11 +203,13 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
   async function remove(q: Question) {
     if (!confirm("Xóa câu hỏi này?")) return;
     try {
-      const { error } = await client()
-        .from("questions")
-        .delete()
-        .eq("id", q.id);
-      if (error) throw error;
+      await rpc("bulk_update_questions", {
+        p_set: selected,
+        p_questions: [q.id],
+        p_duration: null,
+        p_points: null,
+        p_delete: true,
+      });
       await loadQuestions();
     } catch (e) {
       notify(errorText(e));
@@ -381,18 +422,18 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <div className="question-list">
-            {questions
-              .filter((q) =>
-                (
-                  authors.find((a) => a.question_id === q.id)?.answer +
-                  q.tiles.join("")
-                )
-                  .toLocaleLowerCase("vi")
-                  .includes(search.toLocaleLowerCase("vi")),
-              )
-              .map((q, i) => (
-                <article key={q.id}>
+          <div className="bulk-toolbar">
+            <label><input type="checkbox" checked={filteredQuestions.length > 0 && filteredQuestions.every((q) => selectedIds.includes(q.id))} onChange={(e) => setSelectedIds(e.target.checked ? filteredQuestions.map((q) => q.id) : [])} /> Chọn tất cả</label>
+            <small>{selectedIds.length} câu đã chọn</small>
+            <input type="number" min={5} max={600} placeholder="Giây" value={bulkDuration} onChange={(e) => setBulkDuration(e.target.value)} />
+            <input type="number" min={0} max={10000} placeholder="Điểm" value={bulkPoints} onChange={(e) => setBulkPoints(e.target.value)} />
+            <Button kind="outline" disabled={!selectedIds.length || bulkBusy || (bulkDuration === "" && bulkPoints === "")} onClick={() => void bulkUpdate()}>Cập nhật</Button>
+            <Button kind="subtle" disabled={!selectedIds.length || bulkBusy} onClick={() => void bulkUpdate(true)}>Xóa {selectedIds.length || ""}</Button>
+          </div>
+          <div className="question-list" aria-label="Danh sách câu hỏi">
+            {filteredQuestions.map((q, i) => (
+                <article key={q.id} className={editing === q.id ? "selected" : ""} title={`${authors.find((a) => a.question_id === q.id)?.answer || ""} · ${q.tiles.join(" · ")}`}>
+                  <input aria-label={`Chọn câu ${i + 1}`} type="checkbox" checked={selectedIds.includes(q.id)} onChange={() => toggleSelected(q.id)} />
                   <span className="number">{i + 1}</span>
                   <div>
                     <strong>
@@ -418,7 +459,7 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
                   </button>
                 </article>
               ))}
-            {!questions.length && <Empty />}
+            {!filteredQuestions.length && <Empty message={questions.length ? "Không có câu nào khớp bộ lọc." : undefined} />}
           </div>
         </Card>
         <Card>

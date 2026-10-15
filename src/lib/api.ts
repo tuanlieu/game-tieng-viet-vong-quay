@@ -155,11 +155,24 @@ export type RoomReward = {
   label: string | null;
   color: string | null;
 };
+export type RewardStatus = {
+  enabled: boolean;
+  available_count: number;
+  history: Array<{
+    id: string;
+    state: "available" | "spun" | "void";
+    label: string | null;
+    color: string | null;
+    awarded_at: string;
+    spun_at: string | null;
+  }>;
+};
 export type PlayState = {
   run: Run | null;
   members: PlayMember[];
   my_submission: MySubmission | null;
   reward: RoomReward | null;
+  reward_status: RewardStatus;
 };
 export async function listSets() {
   const { data, error } = await client()

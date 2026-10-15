@@ -47,6 +47,24 @@ beforeAll(async () => {
       "utf8",
     ),
   );
+  await db.exec(
+    readFileSync(
+      new URL("../supabase/migrations/202610150001_guest_players.sql", import.meta.url),
+      "utf8",
+    ),
+  );
+  await db.exec(
+    readFileSync(
+      new URL("../supabase/migrations/202610150002_room_rewards_and_secure_play.sql", import.meta.url),
+      "utf8",
+    ),
+  );
+  await db.exec(
+    readFileSync(
+      new URL("../supabase/migrations/202610150003_room_config_and_question_bulk.sql", import.meta.url),
+      "utf8",
+    ),
+  );
   await root("insert into auth.users(id) values($1),($2),($3)", [
     owner,
     player,
@@ -69,7 +87,7 @@ beforeAll(async () => {
     [setId],
   );
   roomId = String(room.rows[0].id);
-  await as(player, "select public.join_room($1)", [room.rows[0].code]);
+  await as(player, "select public.join_room($1,$2)", [room.rows[0].code, "Người chơi"]);
   const run = await as(
     owner,
     "select public.control_run($1,'start',$2) as id",
@@ -176,18 +194,18 @@ describe("SQL thực thi trong PostgreSQL PGlite (Auth/Realtime giả lập)", (
     );
     expect(second.rows[0].result).toEqual(s.rows[0].result);
   });
-  it("hết giờ do DB chặn người mới", async () => {
+  it("người vào muộn do DB chặn ở câu đang mở", async () => {
     const code = (
       await root("select code from public.rooms where id=$1", [roomId])
     ).rows[0].code;
-    await as(outsider, "select public.join_room($1)", [code]);
+    await as(outsider, "select public.join_room($1,$2)", [code, "Người mới"]);
     await root(
       "update public.runs set deadline=clock_timestamp()-interval '1 second' where id=$1",
       [runId],
     );
     await expect(
       as(outsider, "select public.submit_answer($1,$2)", [runId, "vượt bậc"]),
-    ).rejects.toThrow("hết giờ");
+    ).rejects.toThrow("chưa tham gia câu này");
   });
   it("công bố mới trả đáp án", async () => {
     await as(owner, "select public.control_run($1,'reveal')", [roomId]);
@@ -195,6 +213,34 @@ describe("SQL thực thi trong PostgreSQL PGlite (Auth/Realtime giả lập)", (
       roomId,
     ]);
     expect(r.rows[0].result).toHaveProperty("revealed.answer", "vượt bậc");
+  });
+  it("thưởng được đổi giữa các câu, cấp đúng một lượt và quay lặp không đổi kết quả", async () => {
+    const configuredWheel = await as(
+      owner,
+      "insert into public.wheels(title) values('Vòng thưởng phòng') returning id",
+    );
+    const configuredWheelId = String(configuredWheel.rows[0].id);
+    await as(
+      owner,
+      "insert into public.prizes(wheel_id,label,weight,stock) values($1,'Huy hiệu',1,5),($1,'Bút mực',1,5)",
+      [configuredWheelId],
+    );
+    await as(owner, "select public.configure_room_reward($1,true,$2)", [roomId, configuredWheelId]);
+    const before = await as(player, "select public.room_play_state($1) as state", [roomId]);
+    expect(before.rows[0].state).toMatchObject({ reward_status: { enabled: true, available_count: 0 } });
+    const next = await as(owner, "select public.control_run($1,'start',$2) as id", [roomId, questionId]);
+    const nextRunId = String(next.rows[0].id);
+    await expect(as(owner, "select public.configure_room_reward($1,false,null)", [roomId])).rejects.toThrow("Có thể thay đổi");
+    await as(player, "select public.submit_answer($1,$2)", [nextRunId, "vượt bậc"]);
+    await as(owner, "select public.control_run($1,'reveal')", [roomId]);
+    const awarded = await as(player, "select public.room_play_state($1) as state", [roomId]);
+    expect(awarded.rows[0].state).toMatchObject({ reward_status: { available_count: 1 } });
+    const ticket = awarded.rows[0].state.reward_status.history[0].id;
+    // Tắt chỉ áp dụng từ câu sau, không làm mất lượt đang chờ.
+    await as(owner, "select public.configure_room_reward($1,false,null)", [roomId]);
+    const first = await as(player, "select public.spin_room_reward($1) as result", [ticket]);
+    const second = await as(player, "select public.spin_room_reward($1) as result", [ticket]);
+    expect(second.rows[0].result).toEqual(first.rows[0].result);
   });
   it("người khác không quay vòng riêng", async () =>
     await expect(
