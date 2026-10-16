@@ -95,6 +95,8 @@ export type Prize = {
   weight: number;
   stock: number | null;
   enabled: boolean;
+  reward_kind: "gift" | "cash";
+  cash_value: number;
 };
 export type Wheel = {
   id: string;
@@ -167,6 +169,8 @@ export type RewardStatus = {
       color: string;
       remaining: number | null;
       position: number;
+      reward_kind: "gift" | "cash";
+      cash_value: number;
     }>;
   } | null;
   history: Array<{
@@ -178,12 +182,17 @@ export type RewardStatus = {
     spun_at: string | null;
   }>;
 };
+export type RewardTotals = {
+  player: { gifts: number; cash: number };
+  host: { gifts: number; cash: number } | null;
+};
 export type PlayState = {
   run: Run | null;
   members: PlayMember[];
   my_submission: MySubmission | null;
   reward: RoomReward | null;
   reward_status: RewardStatus;
+  reward_totals: RewardTotals;
 };
 export async function listSets() {
   const { data, error } = await client()
