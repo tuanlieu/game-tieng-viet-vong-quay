@@ -71,6 +71,12 @@ beforeAll(async () => {
       "utf8",
     ),
   );
+  await db.exec(
+    readFileSync(
+      new URL("../supabase/migrations/202610160001_reward_totals.sql", import.meta.url),
+      "utf8",
+    ),
+  );
   await root("insert into auth.users(id) values($1),($2),($3)", [
     owner,
     player,
@@ -228,7 +234,7 @@ describe("SQL thực thi trong PostgreSQL PGlite (Auth/Realtime giả lập)", (
     const configuredWheelId = String(configuredWheel.rows[0].id);
     await as(
       owner,
-      "insert into public.prizes(wheel_id,label,weight,stock) values($1,'Huy hiệu',1,5),($1,'Bút mực',1,5)",
+      "insert into public.prizes(wheel_id,label,weight,stock,reward_kind,cash_value) values($1,'Tiền mặt',1,5,'cash',50000),($1,'Tiền mặt nhỏ',1,5,'cash',20000)",
       [configuredWheelId],
     );
     await as(owner, "select public.configure_room_reward($1,true,$2)", [roomId, configuredWheelId]);
@@ -236,8 +242,8 @@ describe("SQL thực thi trong PostgreSQL PGlite (Auth/Realtime giả lập)", (
     expect(before.rows[0].state).toMatchObject({ reward_status: { enabled: true, available_count: 0 } });
     expect(before.rows[0].state.reward_status.wheel.items).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ label: "Huy hiệu", remaining: 5 }),
-        expect.objectContaining({ label: "Bút mực", remaining: 5 }),
+        expect.objectContaining({ label: "Tiền mặt", remaining: 5, reward_kind: "cash", cash_value: 50000 }),
+        expect.objectContaining({ label: "Tiền mặt nhỏ", remaining: 5 }),
       ]),
     );
     const next = await as(owner, "select public.control_run($1,'start',$2) as id", [roomId, questionId]);
@@ -254,6 +260,8 @@ describe("SQL thực thi trong PostgreSQL PGlite (Auth/Realtime giả lập)", (
     const second = await as(player, "select public.spin_room_reward($1) as result", [ticket]);
     expect(second.rows[0].result).toEqual(first.rows[0].result);
     const afterSpin = await as(player, "select public.room_play_state($1) as state", [roomId]);
+    expect(afterSpin.rows[0].state.reward_totals.player.gifts).toBe(0);
+    expect(afterSpin.rows[0].state.reward_totals.player.cash).toBeGreaterThan(0);
     const spun = afterSpin.rows[0].state.reward_status.wheel.items.find(
       (item: { label: string }) => item.label === first.rows[0].result.label,
     );
