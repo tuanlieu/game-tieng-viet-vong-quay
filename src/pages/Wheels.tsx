@@ -15,6 +15,7 @@ import {
   wheelRotation,
   chooseWeighted,
 } from "../lib/game";
+import { useAudio } from "../lib/audio";
 type Spin = {
   id: string;
   prize_id: string;
@@ -30,6 +31,7 @@ export default function Wheels({
   notify: (s: string) => void;
   onActivity: (active: boolean) => void;
 }) {
+  const audio = useAudio();
   const [wheels, setWheels] = useState<Wheel[]>([]),
     [selected, setSelected] = useState(""),
     [title, setTitle] = useState(""),
@@ -110,6 +112,11 @@ export default function Wheels({
     onActivity(spinning);
     return () => onActivity(false);
   }, [spinning]);
+  useEffect(() => {
+    if (spinning) audio.stop("wheelMusic");
+    else audio.loop("wheelMusic", "wheelBackground", 0.2);
+    return () => { audio.stop("wheelMusic"); audio.stop("wheelSpin"); };
+  }, [spinning, audio.foregroundTick, audio.prefs.enabled, audio.prefs.music]);
   async function create() {
     try {
       const { data, error } = await client()
@@ -199,8 +206,10 @@ export default function Wheels({
           throw new Error("Không tìm thấy ô kết quả; xem lịch sử trên server.");
       }
       setRotation((r) => wheelRotation(index, prizes.length, r));
+      audio.loop("wheelSpin", "wheelSpin", 0.7);
       window.setTimeout(
         () => {
+          audio.stop("wheelSpin");
           setSpinning(false);
           setResult({ label: resultLabel, test });
           if (!test) {
@@ -216,6 +225,7 @@ export default function Wheels({
           150,
       );
     } catch (e) {
+      audio.stop("wheelSpin");
       setSpinning(false);
       if (!test) setUncertain(true);
       notify(

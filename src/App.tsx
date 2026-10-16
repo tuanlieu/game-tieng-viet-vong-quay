@@ -52,6 +52,8 @@ import Rooms from "./pages/Rooms";
 import Wheels from "./pages/Wheels";
 import Themes from "./pages/Themes";
 import Profile, { UsersAdmin } from "./pages/Profile";
+import { AudioProvider } from "./lib/audio";
+import { AudioButton, AudioSettings } from "./components/AudioControls";
 const NAME = "Game Tiếng Việt - Vòng Quay May Mắn";
 const sessionGet = (key: string) =>
   typeof sessionStorage === "undefined" ? null : sessionStorage.getItem(key);
@@ -97,7 +99,7 @@ function initialTheme() {
   }
   return themes[0];
 }
-export default function App() {
+function AppShell() {
   const [page, setPage] = useState<Page>(
     location.hash.startsWith("#join=")
       ? "rooms"
@@ -472,6 +474,7 @@ export default function App() {
             >
               {dark ? <Sun size={19} /> : <Moon size={19} />}
             </button>
+            <AudioButton />
             {session ? (
               <button
                 onClick={() =>
@@ -775,10 +778,7 @@ export default function App() {
                     Chọn bộ màu
                   </Button>
                 </div>
-                <p>
-                  Hiệu ứng tự giảm theo tùy chọn “Reduce motion” của thiết bị.
-                  Phiên bản này không phát âm thanh.
-                </p>
+                <AudioSettings />
                 <p>
                   Logo cơ quan chưa có file khả dụng. Logo, hình nền tùy chỉnh
                   và tên thương hiệu chưa sẵn sàng.
@@ -807,7 +807,7 @@ export default function App() {
           {visiblePage === "media" && (
             <Unavailable
               title="Thư viện ảnh/âm thanh"
-              reason="Upload ảnh, âm thanh và kiểm tra nội dung file chưa sẵn sàng. Không có nút tải lên giả."
+              reason="Bộ âm thanh trò chơi đã được tích hợp sẵn trong Cài đặt. Upload và quản lý thư viện ảnh/âm thanh riêng chưa sẵn sàng."
             />
           )}
         </main>
@@ -819,6 +819,9 @@ export default function App() {
       </div>
     </div>
   );
+}
+export default function App() {
+  return <AudioProvider><AppShell /></AudioProvider>;
 }
 function GuestLanding({
   initialCode,
@@ -971,8 +974,9 @@ function Guide({ onClick }: { onClick: (p: Page) => void }) {
           tăng dần. Chờ câu hoặc vòng quay kết thúc mới áp dụng.
         </p>
         <p>
-          Chưa sẵn sàng: khách ẩn danh, QR phòng, ảnh/âm thanh, chơi cá nhân tự
-          động, một số màn quản trị nâng cao. Xem docs/STATUS.md trong mã nguồn
+          Chưa sẵn sàng: QR phòng, upload ảnh/âm thanh tự quản lý, chơi cá nhân tự
+          động, một số màn quản trị nâng cao. Âm thanh trò chơi tích hợp sẵn được
+          bật trong Cài đặt. Xem docs/STATUS.md trong mã nguồn
           để có trạng thái đầy đủ.
         </p>
       </Card>

@@ -38,6 +38,8 @@ import {
   type RewardStatus,
 } from "../lib/api";
 import { secondsLeft, wheelRotation, type Theme } from "../lib/game";
+import { useAudio } from "../lib/audio";
+import { AudioButton, AudioSettings } from "../components/AudioControls";
 type Member = {
   user_id: string;
   display_name: string;
@@ -58,6 +60,7 @@ export default function Rooms({
   onActivity: (active: boolean) => void;
   onTheme: (room: string | null) => void;
 }) {
+  const audio = useAudio();
   const savedGuest = (() => {
     try {
       return JSON.parse(sessionStorage.getItem("game-guest-room") || "null") as {
@@ -104,6 +107,7 @@ export default function Rooms({
     [rewardMessage, setRewardMessage] = useState(""),
     [rewardMessageError, setRewardMessageError] = useState(false);
   const [answerPopupRunId, setAnswerPopupRunId] = useState<string | null>(null);
+  const [countdownReadyRunId, setCountdownReadyRunId] = useState<string | null>(null);
   const [rewardSpin, setRewardSpin] = useState<{
     rewardId: string;
     spinning: boolean;
@@ -111,6 +115,10 @@ export default function Rooms({
     result: { label: string; color: string } | null;
   } | null>(null);
   const revealedRunRef = useRef<string | null>(null);
+  const receivedRunRef = useRef<string | null>(null);
+  const warnedRunRef = useRef<string | null>(null);
+  const resultSoundRunRef = useRef<string | null>(null);
+  const submittingRef = useRef(false);
   const room = rooms.find((r) => r.id === selected);
   const isOwner = !!userId && !isAnonymous && room?.owner_id === userId;
   const rewardDirty = Boolean(
@@ -314,6 +322,49 @@ export default function Rooms({
     run?.can_answer !== false &&
     !answered &&
     !busy;
+  useEffect(() => {
+    audio.setContext(presentation);
+    return () => audio.setContext(false);
+  }, [presentation]);
+  useEffect(() => {
+    if (!room || run || rewardSpin) audio.stop("waiting");
+    else audio.loop("waiting", "waitingRoom", 0.28);
+  }, [room?.id, run?.id, rewardSpin, audio.foregroundTick, audio.prefs.enabled, audio.prefs.music]);
+  useEffect(() => {
+    if (!run?.id || isOwner || receivedRunRef.current === run.id) return;
+    receivedRunRef.current = run.id;
+    setCountdownReadyRunId(null);
+    const isNewlyOpened = left >= run.duration - 1;
+    if (!audio.prefs.enabled || !isNewlyOpened) {
+      setCountdownReadyRunId(run.id);
+      return;
+    }
+    audio.play("questionStart", { volume: 0.9, onEnded: () => setCountdownReadyRunId(run.id) });
+  }, [run?.id, run?.duration, left, isOwner, audio.prefs.enabled]);
+  useEffect(() => {
+    const shouldPlay = !isOwner && countdownReadyRunId === run?.id && run?.state === "running" && !answered && run.can_answer !== false && left > 0;
+    if (shouldPlay) audio.loop("countdown", "countdown", 0.5);
+    else { audio.stop("countdown"); if (run?.state !== "running") audio.stopEffects(["tenSeconds"]); }
+  }, [run?.id, run?.state, run?.can_answer, countdownReadyRunId, answered, left, isOwner, audio.foregroundTick, audio.prefs.enabled, audio.prefs.effects]);
+  useEffect(() => () => audio.stopEffects(["tenSeconds"]), [run?.id]);
+  useEffect(() => {
+    if (!run?.id || isOwner || run.state !== "running" || answered || run.duration <= 10 || left <= 0 || left > 10 || warnedRunRef.current === run.id) return;
+    warnedRunRef.current = run.id;
+    audio.stop("countdown");
+    audio.play("tenSeconds", { volume: 1, onEnded: () => {
+      if (!document.hidden) audio.loop("countdown", "countdown", 0.5);
+    } });
+  }, [run?.id, run?.state, run?.duration, left, answered, isOwner]);
+  useEffect(() => {
+    if (!run?.id || run.state !== "revealed" || !mySubmission || mySubmission.correct === null || resultSoundRunRef.current === run.id) return;
+    resultSoundRunRef.current = run.id;
+    audio.play(mySubmission.correct ? "correct" : "incorrect", { volume: 0.95 });
+  }, [run?.id, run?.state, mySubmission?.correct]);
+  useEffect(() => {
+    if (!rewardSpin) { audio.stop("wheelMusic"); audio.stop("wheelSpin"); return; }
+    if (rewardSpin.spinning) audio.stop("wheelMusic");
+    else { audio.stop("wheelSpin"); audio.loop("wheelMusic", "wheelBackground", 0.2); }
+  }, [rewardSpin?.spinning, rewardSpin?.rewardId, audio.foregroundTick, audio.prefs.enabled, audio.prefs.music]);
   const rewardWheelItems = rewardStatus?.wheel?.items || [];
   const rewardWheelBackground = rewardWheelItems.length
     ? `conic-gradient(${rewardWheelItems.map((item, index) => {
@@ -366,6 +417,7 @@ export default function Rooms({
         p_action: action,
         p_question: questionId,
       });
+      if (action === "start") audio.play("questionStart", { volume: 0.9 });
       const sent = Date.now();
       const data = await rpc<Run | null>("current_run", { p_room: selected });
       setRun(data);
@@ -378,6 +430,8 @@ export default function Rooms({
     }
   }
   async function submit() {
+    if (!canSubmit || submittingRef.current) return;
+    submittingRef.current = true;
     setBusy(true);
     try {
       const answer =
@@ -389,11 +443,15 @@ export default function Rooms({
         p_run: run?.id,
         p_answer: answer,
       });
+      audio.stop("countdown");
+      audio.stopEffects(["tenSeconds"]);
+      audio.play("submit", { volume: 0.7 });
       setMySubmission({ submitted: true, answer, correct: null, score: null });
       notify("Đã gửi câu trả lời. Chờ MC công bố đáp án.");
     } catch (e) {
       notify(errorText(e));
     } finally {
+      submittingRef.current = false;
       setBusy(false);
     }
   }
@@ -432,12 +490,15 @@ export default function Rooms({
         target < 0 ? 0 : target,
         Math.max(1, rewardWheelItems.length),
       );
+      audio.stop("wheelMusic");
+      audio.loop("wheelSpin", "wheelSpin", 0.7);
       window.requestAnimationFrame(() =>
         setRewardSpin((current) => current && current.rewardId === rewardId
           ? { ...current, rotation }
           : current),
       );
       window.setTimeout(() => {
+        audio.stop("wheelSpin");
         if (roomReward?.id === rewardId)
           setRoomReward({ ...roomReward, state: "spun", label: result.label, color: result.color });
         setRewardStatus((previous) => previous ? {
@@ -458,6 +519,7 @@ export default function Rooms({
         notify(`🎉 Bạn đã quay được: ${result.label}`);
       }, 10000);
     } catch (e) {
+      audio.stop("wheelSpin");
       setRewardSpin(null);
       setBusy(false);
       notify(errorText(e));
@@ -493,6 +555,8 @@ export default function Rooms({
         title={room ? "Phòng của bạn" : "Phòng chơi"}
         description={room ? "Sẵn sàng trả lời câu hỏi và nhận phần thưởng." : "Một mã phòng. Nhiều người chơi. Chung một niềm vui."}
       >
+        <AudioButton />
+        <AudioSettings />
         {!isAnonymous && userId && (
           <div className="room-toolbar">
             <label className="room-picker">
@@ -757,9 +821,11 @@ export default function Rooms({
                         }
                         key={i}
                         aria-label={`Ô ${i + 1}: ${t}`}
-                        onClick={() =>
-                          setChosen((c) => (c.includes(i) ? c : [...c, i]))
-                        }
+                        onClick={() => {
+                          if (!canSubmit || chosen.includes(i)) return;
+                          audio.play("tileClick", { volume: 0.38 });
+                          setChosen((c) => (c.includes(i) ? c : [...c, i]));
+                        }}
                       >
                         {t}
                       </button>
@@ -780,6 +846,7 @@ export default function Rooms({
                         i >= 0 &&
                         i < (run?.tiles.length || 0)
                       )
+                        audio.play("tileClick", { volume: 0.38 });
                         setChosen((c) => (c.includes(i) ? c : [...c, i]));
                     }}
                   >

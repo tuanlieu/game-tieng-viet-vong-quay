@@ -59,6 +59,16 @@ button:disabled {
   opacity: 0.48;
   cursor: not-allowed;
 }
+.audio-button { width:40px; height:40px; border-radius:12px; color:var(--primary); background:#edf8f4; border:1px solid #cde6dc; }
+.audio-button:hover { background:#dff2eb; }
+.audio-settings { margin:18px 0; max-width:820px; border:1px solid #cfe6dc; background:linear-gradient(140deg,#f8fffb,#fff); }
+.audio-settings > label { display:flex; align-items:center; gap:10px; margin:13px 0; font-size:13px; font-weight:800; color:var(--ink); }
+.audio-settings > label input[type="range"] { flex:1; accent-color:var(--primary); }
+.audio-settings > label select { margin-left:auto; min-height:38px; }
+.audio-settings .page-title { margin-bottom:10px; }
+.audio-settings .page-title button { font-size:25px; width:36px; height:36px; border-radius:50%; background:#eef5f2; }
+.sound-previews { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; padding-top:14px; border-top:1px solid var(--line); }
+.sound-previews .button { min-height:35px; padding:8px 10px; font-size:11px; }
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
