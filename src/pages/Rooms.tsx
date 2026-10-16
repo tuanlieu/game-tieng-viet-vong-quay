@@ -36,6 +36,7 @@ import {
   type MySubmission,
   type RoomReward,
   type RewardStatus,
+  type RewardTotals,
 } from "../lib/api";
 import { secondsLeft, wheelRotation, type Theme } from "../lib/game";
 import { useAudio } from "../lib/audio";
@@ -90,6 +91,7 @@ export default function Rooms({
     [mySubmission, setMySubmission] = useState<MySubmission | null>(null),
     [roomReward, setRoomReward] = useState<RoomReward | null>(null),
     [rewardStatus, setRewardStatus] = useState<RewardStatus | null>(null),
+    [rewardTotals, setRewardTotals] = useState<RewardTotals | null>(null),
     [questions, setQuestions] = useState<Question[]>([]),
     [questionId, setQuestionId] = useState(""),
     [chosen, setChosen] = useState<number[]>([]),
@@ -181,6 +183,7 @@ export default function Rooms({
         setMySubmission(state.my_submission);
         setRoomReward(state.reward);
         setRewardStatus(state.reward_status);
+        setRewardTotals(state.reward_totals);
         if (state.run)
           setOffset(Date.parse(state.run.server_now) - (sent + Date.now()) / 2);
         await loadRooms();
@@ -932,6 +935,10 @@ export default function Rooms({
               {!isOwner && (
                 <section className="player-rewards" aria-label="Quay thưởng">
                   <div className="player-reward-heading"><span>🎁</span><div><small>QUAY THƯỞNG</small><h3>Quay thưởng</h3></div><b>{rewardStatus?.available_count || 0} lượt</b></div>
+                  <div className="reward-totals" aria-label="Tổng phần thưởng đã nhận">
+                    <span><small>TỔNG QUÀ ĐÃ NHẬN</small><strong>{rewardTotals?.player.gifts || 0}</strong></span>
+                    <span><small>TỔNG TIỀN ĐÃ NHẬN</small><strong>{Number(rewardTotals?.player.cash || 0).toLocaleString("vi-VN")} ₫</strong></span>
+                  </div>
                   {!rewardStatus?.enabled ? (
                     <p>Phòng chưa bật thưởng quay.</p>
                   ) : (rewardStatus.available_count || 0) > 0 ? (
@@ -990,6 +997,10 @@ export default function Rooms({
                       <div><strong>Thưởng vòng quay</strong><small>{room.reward_fastest_enabled ? "Đang bật" : "Đang tắt"}</small></div>
                       {!canConfigureReward && <small>Có thể thay đổi sau khi kết thúc câu hiện tại.</small>}
                     </div>
+                  <div className="reward-totals host" aria-label="Tổng phần thưởng đã phát">
+                    <span><small>TỔNG QUÀ ĐÃ PHÁT</small><strong>{rewardTotals?.host?.gifts || 0}</strong></span>
+                    <span><small>TỔNG TIỀN ĐÃ PHÁT</small><strong>{Number(rewardTotals?.host?.cash || 0).toLocaleString("vi-VN")} ₫</strong></span>
+                  </div>
                   <Field label="Vòng quay đang dùng">
                     <select
                       value={rewardWheel}
