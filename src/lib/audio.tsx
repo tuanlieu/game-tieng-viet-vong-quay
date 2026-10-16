@@ -23,6 +23,17 @@ export type AudioPreferences = {
 };
 const defaults: AudioPreferences = { enabled: false, master: 0.8, music: true, effects: true, placement: "all" };
 const preferenceKey = "game-audio-preferences";
+// Kept to short, time-sensitive cues only. Background tracks continue to load
+// on demand so opening the game does not download every large audio asset.
+const PRELOAD_EFFECTS: SoundId[] = [
+  "questionStart",
+  "tenSeconds",
+  "correct",
+  "incorrect",
+  "tileClick",
+  "submit",
+  "wheelSpin",
+];
 function assetUrl(file: string) { return import.meta.env.BASE_URL + file; }
 function savedPreferences(): AudioPreferences {
   try { return typeof localStorage === "undefined" ? defaults : { ...defaults, ...JSON.parse(localStorage.getItem(preferenceKey) || "{}") }; } catch { return defaults; }
@@ -46,10 +57,27 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   const [foregroundTick, setForegroundTick] = useState(0);
   const loops = useRef(new Map<Channel, HTMLAudioElement>());
   const effects = useRef(new Set<HTMLAudioElement>());
+  const effectVoices = useRef(new Map<SoundId, HTMLAudioElement[]>());
   const presentation = useRef(false);
   const allowed = () => prefs.enabled && (prefs.placement === "all" || presentation.current);
   const gain = (kind: "music" | "effects", raw: number) => Math.max(0, Math.min(1, prefs.master * raw * (kind === "music" ? (prefs.music ? 1 : 0) : (prefs.effects ? 1 : 0))));
   const save = (next: AudioPreferences) => { setPrefs(next); if (typeof localStorage !== "undefined") localStorage.setItem(preferenceKey, JSON.stringify(next)); };
+  const createEffectVoice = (id: SoundId) => {
+    const audio = new Audio(assetUrl(SOUND_FILES[id]));
+    audio.preload = "auto";
+    audio.dataset.sound = id;
+    return audio;
+  };
+  const prepareEffect = (id: SoundId) => {
+    const pool = effectVoices.current.get(id) || [];
+    if (!pool.length) {
+      const voice = createEffectVoice(id);
+      pool.push(voice);
+      effectVoices.current.set(id, pool);
+    }
+    pool.forEach((voice) => voice.load());
+    return pool;
+  };
   const stop = (channel: Channel) => { const audio = loops.current.get(channel); if (audio) { audio.pause(); audio.currentTime = 0; loops.current.delete(channel); } };
   const stopEffects = (ids?: SoundId[]) => effects.current.forEach((audio) => {
     if (ids && !ids.includes(audio.dataset.sound as SoundId)) return;
@@ -62,6 +90,7 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     async activate() {
       const next = { ...prefs, enabled: true };
       save(next);
+      PRELOAD_EFFECTS.forEach(prepareEffect);
       const probe = new Audio(assetUrl(SOUND_FILES.tileClick));
       probe.muted = true;
       try { await probe.play(); probe.pause(); return true; } catch { return false; }
@@ -79,9 +108,14 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     },
     play(id, options) {
       if (!allowed() || !prefs.effects) return;
-      const audio = new Audio(assetUrl(SOUND_FILES[id]));
-      audio.preload = "auto";
-      audio.dataset.sound = id;
+      const pool = prepareEffect(id);
+      let audio = pool.find((voice) => voice.paused || voice.ended);
+      if (!audio) {
+        audio = createEffectVoice(id);
+        pool.push(audio);
+      }
+      audio.pause();
+      try { audio.currentTime = 0; } catch { /* Media has not started yet. */ }
       audio.volume = gain("effects", options?.volume ?? 0.9);
       effects.current.add(audio);
       audio.onended = () => { effects.current.delete(audio); options?.onEnded?.(); };
@@ -107,6 +141,9 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     stopAll,
     setContext(value) { presentation.current = value; },
   }), [prefs, foregroundTick]);
+  useEffect(() => {
+    if (prefs.enabled) PRELOAD_EFFECTS.forEach(prepareEffect);
+  }, [prefs.enabled]);
   useEffect(() => {
     const hidden = () => { if (document.hidden) stopAll(); else setForegroundTick((value) => value + 1); };
     document.addEventListener("visibilitychange", hidden);
