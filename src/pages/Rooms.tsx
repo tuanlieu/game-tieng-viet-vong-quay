@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Play,
   Pause,
@@ -330,7 +330,7 @@ export default function Rooms({
     if (!room || run || rewardSpin) audio.stop("waiting");
     else audio.loop("waiting", "waitingRoom", 0.28);
   }, [room?.id, run?.id, rewardSpin, audio.foregroundTick, audio.prefs.enabled, audio.prefs.music]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!run?.id || isOwner || receivedRunRef.current === run.id) return;
     receivedRunRef.current = run.id;
     setCountdownReadyRunId(null);
@@ -347,7 +347,7 @@ export default function Rooms({
     else { audio.stop("countdown"); if (run?.state !== "running") audio.stopEffects(["tenSeconds"]); }
   }, [run?.id, run?.state, run?.can_answer, countdownReadyRunId, answered, left, isOwner, audio.foregroundTick, audio.prefs.enabled, audio.prefs.effects]);
   useEffect(() => () => audio.stopEffects(["tenSeconds"]), [run?.id]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!run?.id || isOwner || run.state !== "running" || answered || run.duration <= 10 || left <= 0 || left > 10 || warnedRunRef.current === run.id) return;
     warnedRunRef.current = run.id;
     audio.stop("countdown");
@@ -355,7 +355,7 @@ export default function Rooms({
       if (!document.hidden) audio.loop("countdown", "countdown", 0.5);
     } });
   }, [run?.id, run?.state, run?.duration, left, answered, isOwner]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!run?.id || run.state !== "revealed" || !mySubmission || mySubmission.correct === null || resultSoundRunRef.current === run.id) return;
     resultSoundRunRef.current = run.id;
     audio.play(mySubmission.correct ? "correct" : "incorrect", { volume: 0.95 });
@@ -417,10 +417,10 @@ export default function Rooms({
         p_action: action,
         p_question: questionId,
       });
-      if (action === "start") audio.play("questionStart", { volume: 0.9 });
       const sent = Date.now();
       const data = await rpc<Run | null>("current_run", { p_room: selected });
       setRun(data);
+      if (action === "start" && data) audio.play("questionStart", { volume: 0.9 });
       if (data)
         setOffset(Date.parse(data.server_now) - (sent + Date.now()) / 2);
     } catch (e) {
