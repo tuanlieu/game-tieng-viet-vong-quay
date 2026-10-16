@@ -156,6 +156,11 @@ export default function App() {
     go("rooms");
   }
   useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(""), 2000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+  useEffect(() => {
     if (!db) return;
     const auth = db;
     let alive = true;

@@ -912,27 +912,20 @@ textarea {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 22px;
-  align-items: stretch;
-  min-height: min(70vh, 760px);
+  align-items: start;
 }
 .question-layout > .card {
-  min-height: 0;
-  overflow: auto;
+  overflow: visible;
 }
 .question-layout > .card:first-child {
-  display: flex;
-  flex-direction: column;
+  display: block;
 }
 .question-layout > .card:last-child form {
   padding-bottom: 8px;
 }
 .question-list {
   margin-top: 14px;
-  overflow-y: auto;
-  min-height: 180px;
-  flex: 1;
   border-top: 1px solid var(--line);
-  scrollbar-gutter: stable;
 }
 .bulk-toolbar {
   display: flex;
@@ -1902,8 +1895,6 @@ td button {
   .room-toolbar .room-picker { flex: 1 1 210px; }
   .room-toolbar .button { flex: 1 1 135px; }
   .question-layout { min-height: 0; }
-  .question-layout > .card { overflow: visible; }
-  .question-list { max-height: 52vh; flex: none; }
   .bulk-toolbar { position: static; }
   .bulk-toolbar label { flex: 1 1 145px; }
   .bulk-toolbar small { flex: 1 1 105px; }

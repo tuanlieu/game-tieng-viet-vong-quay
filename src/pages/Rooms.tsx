@@ -269,7 +269,7 @@ export default function Rooms({
   }, [run?.id, run?.state]);
   useEffect(() => {
     if (!answerPopupRunId) return;
-    const timer = window.setTimeout(() => setAnswerPopupRunId(null), 5000);
+    const timer = window.setTimeout(() => setAnswerPopupRunId(null), 2000);
     return () => window.clearTimeout(timer);
   }, [answerPopupRunId]);
   useEffect(() => {
@@ -1109,7 +1109,7 @@ export default function Rooms({
             ) : (
               <p>Bạn chưa gửi câu trả lời.</p>
             )}
-            <small className="popup-countdown">Tự đóng sau vài giây</small>
+            <small className="popup-countdown">Tự đóng sau 2 giây</small>
           </div>
         </Modal>
       )}
