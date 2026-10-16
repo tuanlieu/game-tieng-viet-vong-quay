@@ -39,6 +39,8 @@ export default function Wheels({
     [label, setLabel] = useState(""),
     [weight, setWeight] = useState(1),
     [stock, setStock] = useState(""),
+    [rewardKind, setRewardKind] = useState<"gift" | "cash">("gift"),
+    [cashValue, setCashValue] = useState(""),
     [color, setColor] = useState("#04605E"),
     [history, setHistory] = useState<Spin[]>([]),
     [spinning, setSpinning] = useState(false),
@@ -142,11 +144,15 @@ export default function Wheels({
           label,
           weight,
           stock: stock === "" ? null : Number(stock),
+          reward_kind: rewardKind,
+          cash_value: rewardKind === "cash" ? Number(cashValue) : 0,
           color,
           position: prizes.length,
         });
       if (error) throw error;
       setLabel("");
+      setRewardKind("gift");
+      setCashValue("");
       await refresh();
     } catch (e) {
       notify(errorText(e));
@@ -386,15 +392,26 @@ export default function Wheels({
                   void add();
                 }}
               >
-                <Field label="Tên quà / số tiền dạng text">
+                <Field label="Tên phần thưởng">
                   <input
                     required
                     value={label}
                     maxLength={100}
                     onChange={(e) => setLabel(e.target.value)}
-                    placeholder="Ví dụ: 100.000 ₫"
+                    placeholder="Ví dụ: Voucher cà phê hoặc Tiền mặt 100.000 ₫"
                   />
                 </Field>
+                <div className="two-columns">
+                  <Field label="Loại phần thưởng">
+                    <select value={rewardKind} onChange={(e) => setRewardKind(e.target.value as "gift" | "cash") }>
+                      <option value="gift">Quà hiện vật / voucher</option>
+                      <option value="cash">Tiền mặt</option>
+                    </select>
+                  </Field>
+                  <Field label="Giá trị tiền (VNĐ)">
+                    <input type="number" min="0" step="1000" disabled={rewardKind !== "cash"} required={rewardKind === "cash"} value={cashValue} onChange={(e) => setCashValue(e.target.value)} placeholder="Ví dụ: 100000" />
+                  </Field>
+                </div>
                 <div className="two-columns">
                   <Field label="Trọng số / phần trăm">
                     <input
@@ -436,6 +453,7 @@ export default function Wheels({
                   <th>Ô / Quà</th>
                   <th>Xác suất hiệu lực</th>
                   <th>Tồn</th>
+                  <th>Giá trị</th>
                   <th>Thao tác</th>
                 </tr>
               </thead>
@@ -457,6 +475,7 @@ export default function Wheels({
                       %
                     </td>
                     <td>{p.stock ?? "∞"}</td>
+                    <td>{p.reward_kind === "cash" ? `${Number(p.cash_value || 0).toLocaleString("vi-VN")} ₫` : "Quà"}</td>
                     <td>
                       <button
                         disabled={spinning || wheel?.owner_id !== userId}
@@ -481,6 +500,18 @@ export default function Wheels({
                         }}
                       >
                         Sửa tồn
+                      </button>
+                      <button
+                        aria-label="Sửa loại và giá trị phần thưởng"
+                        disabled={spinning || wheel?.owner_id !== userId}
+                        onClick={() => {
+                          const type = prompt("Nhập gift (quà) hoặc cash (tiền mặt)", p.reward_kind || "gift");
+                          if (type !== "gift" && type !== "cash") return;
+                          const amount = type === "cash" ? prompt("Giá trị tiền (VNĐ)", String(p.cash_value || 0)) : "0";
+                          if (amount !== null && /^\d+$/.test(amount)) void updatePrize(p.id, { reward_kind: type, cash_value: Number(amount) });
+                        }}
+                      >
+                        Giá trị
                       </button>
                       <button
                         aria-label="Xóa quà"
