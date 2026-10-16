@@ -68,6 +68,12 @@ button:disabled {
 .audio-settings > label input[type="range"] { flex:1; accent-color:var(--primary); }
 .audio-settings > label select { margin-left:auto; min-height:38px; }
 .audio-settings .page-title { margin-bottom:10px; }
+.reward-totals { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:14px 0; }
+.reward-totals span { padding:11px 12px; border:1px solid #cfe6dc; background:#f4fbf7; border-radius:12px; }
+.reward-totals small { display:block; color:var(--muted); font-size:9px; font-weight:800; letter-spacing:.4px; }
+.reward-totals strong { display:block; color:var(--primary); font-size:18px; margin-top:4px; }
+.reward-totals.host span { background:#fff9ed; border-color:#f0ddb1; }
+.reward-totals.host strong { color:#805818; }
 .audio-settings .page-title button { font-size:25px; width:36px; height:36px; border-radius:50%; background:#eef5f2; }
 .sound-previews { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; padding-top:14px; border-top:1px solid var(--line); }
 .sound-previews .button { min-height:35px; padding:8px 10px; font-size:11px; }
