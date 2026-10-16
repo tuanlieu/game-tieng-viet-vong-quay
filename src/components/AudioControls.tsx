@@ -8,7 +8,18 @@ const labels: Record<keyof typeof SOUND_FILES, string> = {
 };
 export function AudioButton() {
   const audio = useAudio();
-  return <button className="audio-button" aria-label={audio.prefs.enabled ? "Cài đặt âm thanh" : "Bật âm thanh"} title={audio.prefs.enabled ? "Cài đặt âm thanh" : "Bật âm thanh"} onClick={() => void audio.activate()}>{audio.prefs.enabled ? <Volume2 size={19} /> : <VolumeX size={19} />}</button>;
+  const enabled = audio.prefs.enabled;
+  return <button
+    type="button"
+    className={`audio-button${enabled ? "" : " is-muted"}`}
+    aria-label={enabled ? "Tắt âm thanh" : "Bật âm thanh"}
+    aria-pressed={enabled}
+    title={enabled ? "Tắt âm thanh" : "Bật âm thanh"}
+    onClick={() => {
+      if (enabled) audio.update({ enabled: false });
+      else void audio.activate();
+    }}
+  >{enabled ? <Volume2 size={19} /> : <VolumeX size={19} />}</button>;
 }
 export function AudioSettings() {
   const audio = useAudio();
