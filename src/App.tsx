@@ -55,6 +55,10 @@ import Profile, { UsersAdmin } from "./pages/Profile";
 import { AudioProvider } from "./lib/audio";
 import { AudioButton, AudioSettings } from "./components/AudioControls";
 const NAME = "Game Tiếng Việt - Vòng Quay May Mắn";
+// A network or browser-storage problem must not leave the entire game behind
+// the restoring screen forever. Supabase can still reconcile the session later
+// through its auth-state listener.
+const AUTH_RESTORE_TIMEOUT_MS = 6000;
 const sessionGet = (key: string) =>
   typeof sessionStorage === "undefined" ? null : sessionStorage.getItem(key);
 type Page =
@@ -166,6 +170,12 @@ function AppShell() {
     if (!db) return;
     const auth = db;
     let alive = true;
+    // `getSession()` may wait indefinitely on some mobile browsers when auth
+    // storage/network is unavailable. Show the app after a short grace period
+    // instead of blocking a guest or an existing player forever.
+    const restoreTimeout = window.setTimeout(() => {
+      if (alive) setAuthReady(true);
+    }, AUTH_RESTORE_TIMEOUT_MS);
     async function update(s: Session | null) {
       if (!alive) return;
       setSession(s);
@@ -189,10 +199,18 @@ function AppShell() {
         if (alive) setAuthReady(true);
       }
     }
-    void consumeAuthCallback()
-      .catch((e) => setToast(errorText(e)))
-      .finally(() => {
-        void auth.auth.getSession().then(({ data }) => void update(data.session));
+    // Do not make ordinary session recovery wait for an OAuth callback that
+    // never resolves. A completed callback emits its own auth state update.
+    void consumeAuthCallback().catch((e) => {
+      if (alive) setToast(errorText(e));
+    });
+    void auth.auth
+      .getSession()
+      .then(({ data }) => void update(data.session))
+      .catch((e) => {
+        if (!alive) return;
+        setToast(errorText(e));
+        setAuthReady(true);
       });
     const { data } = auth.auth.onAuthStateChange((event, s) => {
       setSession(s);
@@ -204,6 +222,7 @@ function AppShell() {
     });
     return () => {
       alive = false;
+      window.clearTimeout(restoreTimeout);
       data.subscription.unsubscribe();
     };
   }, []);
