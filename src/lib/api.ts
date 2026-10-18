@@ -19,6 +19,16 @@ export const db = configured
       },
     })
   : null;
+const AUTH_OPERATION_TIMEOUT_MS = 8000;
+
+function withAuthTimeout<T>(operation: Promise<T>, message: string) {
+  return Promise.race<T>([
+    operation,
+    new Promise<T>((_, reject) => {
+      window.setTimeout(() => reject(new Error(message)), AUTH_OPERATION_TIMEOUT_MS);
+    }),
+  ]);
+}
 export function client() {
   if (!db) throw new Error("Chưa kết nối Supabase. Xem Hướng dẫn để cấu hình.");
   return db;
@@ -34,13 +44,26 @@ export async function startGuestSession(displayName: string) {
   if (cleanName.length < 2 || cleanName.length > 30)
     throw new Error("Nhập tên người chơi hoặc tên đội (2–30 ký tự).");
   const supabase = client();
-  const { data: existing, error: existingError } =
-    await supabase.auth.getSession();
-  if (existingError) throw existingError;
-  if (existing.session) return existing.session;
-  const { data, error } = await supabase.auth.signInAnonymously({
-    options: { data: { display_name: cleanName } },
-  });
+  // A stale WebView storage lock must not prevent a new player from joining.
+  // If the read times out, continue with anonymous sign-in instead.
+  try {
+    const { data: existing, error: existingError } = await withAuthTimeout(
+      supabase.auth.getSession(),
+      "Không thể đọc phiên cũ trên trình duyệt này.",
+    );
+    if (existingError) throw existingError;
+    if (existing.session) return existing.session;
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== "Không thể đọc phiên cũ trên trình duyệt này.") {
+      throw error;
+    }
+  }
+  const { data, error } = await withAuthTimeout(
+    supabase.auth.signInAnonymously({
+      options: { data: { display_name: cleanName } },
+    }),
+    "Không thể tạo phiên khách. Hãy tải lại trang hoặc mở bằng Safari/Chrome.",
+  );
   if (error) throw error;
   if (!data.session) throw new Error("Không thể tạo phiên khách. Hãy thử lại.");
   return data.session;
