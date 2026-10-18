@@ -43,6 +43,16 @@ body {
 .guest-kicker { font-weight:900; color:#04605e; font-size:11px; letter-spacing:1.5px; }.join-error { color:#b42318; font-weight:700; margin:0; }.organiser-link { color:#04605e; font-weight:700; text-decoration:underline; width:fit-content; justify-self:center; padding:8px; }.guest-room-shell { width:min(100%,1200px); margin:0 auto; padding:22px max(22px,env(safe-area-inset-right)) 22px max(22px,env(safe-area-inset-left)); }.guest-room-shell .page-title > .actions, .guest-room-shell .mc-panel, .guest-room-shell .room-bar .actions > button:not(:first-child) { display:none; }.guest-room-shell .room-bar .actions { display:none; }.guest-room-shell .page-title { margin-top:0; }.guest-toast { position:fixed; top:max(16px,env(safe-area-inset-top)); right:max(16px,env(safe-area-inset-right)); z-index:100; }
 .reward-banner { margin-top:18px; border-radius:16px; padding:16px; background:#fff5db; color:#784800; display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; }.reward-banner.spun { background:#e7f7ef; color:#075f49; }.reward-banner > span { width:26px; height:26px; border-radius:50%; box-shadow:0 2px 0 #0003; }.result-good{color:#08765b;font-weight:700}.result-bad{color:#a52c2c;font-weight:700}.switch-row{display:flex;align-items:center;gap:10px;padding:12px;margin:12px 0;border:1px solid #d7e6df;border-radius:11px;background:#fff;font-size:13px;font-weight:700;line-height:1.45;cursor:pointer}.switch-row input{margin:0;accent-color:#04605e}.switch-row span{min-width:0}
 @media (max-width: 680px) { .guest-room-shell { width:100%; padding:calc(12px + env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left)); }.guest-room-shell .page-title p { display:none; }.join-panel { border-radius:22px; }.join-panel input { font-size:16px; }.reward-banner .button { width:100%; }.game-tiles { gap:7px; }.game-tiles .tile { min-width:38px; min-height:42px; font-size:18px; } }
+/* iOS Safari zooms the whole page after focusing an input below 16px. Room
+   entry uses the shared Field component, so protect every editable control
+   on touch devices instead of only the welcome form. */
+@media (hover: none) and (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
 @media (max-width: 767px) {
   .guest-room-shell,
   .guest-room-shell .play-layout,
