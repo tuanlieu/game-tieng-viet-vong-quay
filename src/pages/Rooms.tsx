@@ -792,7 +792,7 @@ export default function Rooms({
             <Card className="play-card">
               <div className="play-header">
                 <span className="eyebrow">
-                  {run ? "THỬ THÁCH GHÉP CHỮ" : "PHÒNG CHỜ"}
+                  {run ? run.question_type === "duoi_hinh_bat_chu" ? "ĐUỔI HÌNH BẮT CHỮ" : "THỬ THÁCH GHÉP CHỮ" : "PHÒNG CHỜ"}
                 </span>
                 <span className={"timer " + (left <= 10 ? "urgent" : "")}>
                   {run ? left + " giây" : "Sẵn sàng"}
@@ -808,7 +808,9 @@ export default function Rooms({
                         ? "Đáp án đã được công bố."
                         : run.can_answer === false
                           ? "Bạn vào khi câu này đã bắt đầu. Hãy sẵn sàng cho câu tiếp theo."
-                        : "Chạm vào từng ô theo thứ tự. Có thể nhập trực tiếp bằng bàn phím."}
+                        : run.question_type === "duoi_hinh_bat_chu"
+                          ? "Quan sát hình ảnh và đoán từ hoặc cụm từ có nghĩa."
+                          : "Chạm vào từng ô theo thứ tự. Có thể nhập trực tiếp bằng bàn phím."}
                   </p>
                   <div className="progress">
                     <span
@@ -817,7 +819,12 @@ export default function Rooms({
                       }}
                     />
                   </div>
-                  <div className="tiles game-tiles">
+                  {run.question_type === "duoi_hinh_bat_chu" && run.image_url && (
+                    <figure className="picture-question">
+                      <img src={import.meta.env.BASE_URL + run.image_url.replace(/^\//, "")} alt="Hình gợi ý câu hỏi" />
+                    </figure>
+                  )}
+                  {run.question_type !== "duoi_hinh_bat_chu" && <><div className="tiles game-tiles">
                     {run.tiles.map((t, i) => (
                       <button
                         className={"tile " + (chosen.includes(i) ? "used" : "")}
@@ -873,7 +880,7 @@ export default function Rooms({
                     ) : (
                       <span>Đáp án của bạn sẽ hiện ở đây</span>
                     )}
-                  </div>
+                  </div></>}
                   <Field label="Hoặc nhập đáp án">
                     <input
                       disabled={!canSubmit}

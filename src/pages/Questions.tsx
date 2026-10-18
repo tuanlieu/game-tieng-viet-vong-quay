@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import Papa from "papaparse";
-import { Plus, Download, Upload, Trash2, Pencil, Copy } from "lucide-react";
+import { Plus, Download, Upload, Trash2, Pencil, Copy, Images } from "lucide-react";
 import {
   Button,
   Card,
@@ -34,7 +34,8 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
     [selectedIds, setSelectedIds] = useState<string[]>([]),
     [bulkDuration, setBulkDuration] = useState(""),
     [bulkPoints, setBulkPoints] = useState(""),
-    [bulkBusy, setBulkBusy] = useState(false);
+    [bulkBusy, setBulkBusy] = useState(false),
+    [importingPictures, setImportingPictures] = useState(false);
   const [editing, setEditing] = useState<string | null>(null),
     [answer, setAnswer] = useState(""),
     [tileText, setTileText] = useState(""),
@@ -146,6 +147,20 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
       setSelected(data.id);
     } catch (e) {
       notify(errorText(e));
+    }
+  }
+  async function importPictureSet() {
+    if (!confirm("Tạo bộ 50 câu Đuổi hình bắt chữ? Bộ câu hỏi này sẽ thuộc tài khoản của bạn.")) return;
+    setImportingPictures(true);
+    try {
+      const id = await rpc<string>("import_duoi_hinh_bat_chu");
+      await loadSets();
+      setSelected(id);
+      notify("Đã tạo bộ 50 câu Đuổi hình bắt chữ. Bạn có thể dùng bộ này để tạo phòng.");
+    } catch (e) {
+      notify(errorText(e));
+    } finally {
+      setImportingPictures(false);
     }
   }
   async function save() {
@@ -350,6 +365,15 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
               Tạo bộ
             </Button>
           </div>
+          <Button
+            kind="outline"
+            disabled={importingPictures}
+            onClick={() => void importPictureSet()}
+          >
+            <Images size={16} />
+            {importingPictures ? "Đang tạo 50 câu…" : "Nạp 50 câu Đuổi hình"}
+          </Button>
+          <small>Ảnh và đáp án đã được ghép đúng thứ tự; đáp án chỉ hiện khi chủ phòng công bố.</small>
           <Field label="Bộ câu hỏi">
             <select
               value={selected}
@@ -439,10 +463,10 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
                     <strong>
                       {authors.find((a) => a.question_id === q.id)?.answer}
                     </strong>
-                    <p>{q.tiles.join(" · ")}</p>
+                    <p>{q.question_type === "duoi_hinh_bat_chu" ? "Đuổi hình bắt chữ" : q.tiles.join(" · ")}</p>
                     <small>
                       {q.duration} giây · {q.points} điểm ·{" "}
-                      {q.mode === "letters" ? "Ghép chữ" : "Ghép từ"}
+                      {q.question_type === "duoi_hinh_bat_chu" ? "Đoán theo ảnh" : q.mode === "letters" ? "Ghép chữ" : "Ghép từ"}
                     </small>
                   </div>
                   <button aria-label="Sửa câu" onClick={() => edit(q)}>

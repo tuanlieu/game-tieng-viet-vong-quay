@@ -109,6 +109,8 @@ export type Question = {
   position: number;
   ignore_accents: boolean;
   hint: string;
+  question_type?: "vua_tieng_viet" | "duoi_hinh_bat_chu";
+  image_url?: string | null;
 };
 export type Prize = {
   id: string;
@@ -154,6 +156,8 @@ export type Run = {
   title: string;
   mode: "letters" | "words";
   hint: string;
+  question_type?: "vua_tieng_viet" | "duoi_hinh_bat_chu";
+  image_url?: string | null;
   server_now: string;
   revealed?: { answer: string; explanation: string };
   can_answer?: boolean;
