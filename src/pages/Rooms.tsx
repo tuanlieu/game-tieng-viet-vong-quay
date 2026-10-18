@@ -1182,7 +1182,7 @@ export default function Rooms({
             {run.revealed.explanation && <p>{run.revealed.explanation}</p>}
             {mySubmission ? (
               <p className={mySubmission.correct ? "result-good" : "result-bad"}>
-                Câu trả lời của bạn: <strong>{mySubmission.answer}</strong> · {mySubmission.correct ? `Đúng, +${mySubmission.score} điểm` : "Chưa đúng"}
+                Câu trả lời của bạn: <strong>{mySubmission.correct ? run.revealed.answer : mySubmission.answer}</strong> · {mySubmission.correct ? `Đúng, +${mySubmission.score} điểm` : "Chưa đúng"}
               </p>
             ) : (
               <p>Bạn chưa gửi câu trả lời.</p>
