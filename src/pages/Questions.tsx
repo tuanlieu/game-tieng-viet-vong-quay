@@ -158,7 +158,13 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
     }
   }
   async function importPictureSet() {
-    if (!confirm("Tạo bộ 50 câu Đuổi hình bắt chữ? Bộ câu hỏi này sẽ thuộc tài khoản của bạn.")) return;
+    const existing = sets.find((set) => set.title === "Đuổi hình bắt chữ – 50 câu");
+    if (existing) {
+      setSelected(existing.id);
+      notify("Bộ 50 câu Đuổi hình bắt chữ đã có trong thư viện của bạn.");
+      return;
+    }
+    if (!confirm("Tạo bộ 50 câu mẫu Đuổi hình bắt chữ trong thư viện của bạn?")) return;
     setImportingPictures(true);
     try {
       const id = await rpc<string>("import_duoi_hinh_bat_chu");
@@ -421,9 +427,9 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
             onClick={() => void importPictureSet()}
           >
             <Images size={16} />
-            {importingPictures ? "Đang tạo 50 câu…" : "Nạp 50 câu Đuổi hình"}
+            {importingPictures ? "Đang tạo 50 câu…" : "Tạo bộ 50 câu mẫu"}
           </Button>
-          <small>Ảnh và đáp án đã được ghép đúng thứ tự; đáp án chỉ hiện khi chủ phòng công bố.</small>
+          <small>Nút này chỉ tạo một lần trong thư viện của bạn; lần sau bấm lại sẽ mở bộ đã có.</small>
           <hr />
           <h3>🧩 Tạo bộ kết hợp</h3>
           <small>Ghép hai bộ của bạn vào một phòng chơi: câu Vua Tiếng Việt trước, tiếp theo là câu Đuổi hình bắt chữ.</small>
