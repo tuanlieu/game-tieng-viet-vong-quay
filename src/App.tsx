@@ -122,9 +122,10 @@ function AppShell() {
     [roomScope, setRoomScope] = useState<string | null>(null),
     [connected, setConnected] = useState(navigator.onLine),
     [counts, setCounts] = useState({ sets: 0, rooms: 0, wheels: 0 }),
-    // SSR/test rendering has no browser session to restore. In a real browser
-    // we intentionally wait before deciding whether to show the guest entry.
-    [authReady, setAuthReady] = useState(!configured || typeof document === "undefined");
+    // Session recovery is deliberately non-blocking. Some embedded browsers
+    // (notably Zalo's WebView) can keep the Supabase storage lock pending.
+    // The public room screen must remain usable while auth is reconciling.
+    [, setAuthReady] = useState(true);
   const [quickCode, setQuickCode] = useState(
     location.hash.startsWith("#join=") ? location.hash.slice(6, 14) : "",
   );
@@ -343,9 +344,6 @@ function AppShell() {
         ]
       : []),
   ];
-  if (!authReady) {
-    return <main className="session-restoring" role="status">Đang khôi phục phiên…</main>;
-  }
   // The public surface is intentionally a game entry point, not a trimmed
   // dashboard. Organiser tools are only rendered after a non-anonymous login.
   if (!session || isAnonymous) {
