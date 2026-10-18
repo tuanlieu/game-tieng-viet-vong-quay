@@ -394,6 +394,10 @@ export default function Rooms({
   }
   async function join() {
     try {
+      // Prevent iOS Safari from keeping the page zoomed after the name/code
+      // field is submitted. The controls are also kept at 16px in CSS.
+      const focused = document.activeElement as HTMLElement | null;
+      focused?.blur();
       if (!userId) await startGuestSession(playerName);
       const id = await rpc<string>("join_room", {
         p_code: code,
