@@ -35,3 +35,4 @@ begin
  return q;
 end $$;
 grant execute on function public.save_image_question(uuid,text,text,integer,integer) to authenticated;
+revoke execute on function public.save_image_question(uuid,text,text,integer,integer) from anon, public;

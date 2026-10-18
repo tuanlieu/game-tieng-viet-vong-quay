@@ -62,3 +62,4 @@ end;
 $$;
 
 grant execute on function public.import_duoi_hinh_bat_chu() to authenticated;
+revoke execute on function public.import_duoi_hinh_bat_chu() from anon, public;
