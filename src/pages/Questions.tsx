@@ -45,6 +45,8 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
     [hint, setHint] = useState(""),
     [explanation, setExplanation] = useState(""),
     [alternatives, setAlternatives] = useState(""),
+    [questionType, setQuestionType] = useState<"vua_tieng_viet" | "duoi_hinh_bat_chu">("vua_tieng_viet"),
+    [imageUrl, setImageUrl] = useState(""),
     [busy, setBusy] = useState(false);
   async function loadSets() {
     try {
@@ -86,6 +88,8 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
     setHint("");
     setExplanation("");
     setAlternatives("");
+    setQuestionType("vua_tieng_viet");
+    setImageUrl("");
   }
   const filteredQuestions = questions.filter((q) =>
     (authors.find((a) => a.question_id === q.id)?.answer + q.tiles.join(""))
@@ -166,6 +170,19 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
   async function save() {
     setBusy(true);
     try {
+      if (questionType === "duoi_hinh_bat_chu") {
+        if (!imageUrl) throw new Error("Hãy tải lên hoặc dán đường dẫn ảnh hợp lệ.");
+        await rpc("save_picture_question", {
+          p_set: selected, p_question: editing, p_image_url: imageUrl,
+          p_answer: answer, p_duration: duration, p_points: points,
+          p_hint: hint, p_explanation: explanation,
+          p_alternatives: alternatives.split("|").map((s) => s.trim()).filter(Boolean),
+        });
+        reset();
+        await loadQuestions();
+        notify("Đã lưu câu hỏi Đuổi hình bắt chữ.");
+        return;
+      }
       const tiles = tileText
         .split("/")
         .map((s) => s.trim().normalize("NFC"))
@@ -214,6 +231,26 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
     setHint(q.hint);
     setExplanation(a?.explanation || "");
     setAlternatives(a?.alternatives.join(" | ") || "");
+    setQuestionType(q.question_type || "vua_tieng_viet");
+    setImageUrl(q.image_url || "");
+  }
+  async function uploadPicture(file: File) {
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      notify("Chỉ nhận ảnh JPG, PNG hoặc WEBP."); return;
+    }
+    if (file.size > 5 * 1024 * 1024) { notify("Ảnh tối đa 5 MB."); return; }
+    setBusy(true);
+    try {
+      const user = (await client().auth.getUser()).data.user;
+      if (!user) throw new Error("Hãy đăng nhập để tải ảnh.");
+      const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+      const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+      const { error } = await client().storage.from('question-images').upload(path, file, { contentType: file.type, upsert: false });
+      if (error) throw error;
+      const { data } = client().storage.from('question-images').getPublicUrl(path);
+      setImageUrl(data.publicUrl);
+      notify("Đã tải ảnh lên. Hãy lưu câu hỏi để hoàn tất.");
+    } catch (e) { notify(errorText(e)); } finally { setBusy(false); }
   }
   async function remove(q: Question) {
     if (!confirm("Xóa câu hỏi này?")) return;
@@ -497,13 +534,27 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
           >
             <Field label="Kiểu chơi">
               <select
-                value={mode}
-                onChange={(e) => setMode(e.target.value as "letters" | "words")}
+                value={questionType}
+                onChange={(e) => setQuestionType(e.target.value as "vua_tieng_viet" | "duoi_hinh_bat_chu")}
               >
-                <option value="letters">Ghép chữ</option>
-                <option value="words">Ghép từ</option>
+                <option value="vua_tieng_viet">▦ Vua tiếng Việt – ghép chữ/từ</option>
+                <option value="duoi_hinh_bat_chu">▧ Đuổi hình bắt chữ – đoán theo ảnh</option>
               </select>
             </Field>
+            {questionType === "vua_tieng_viet" && <Field label="Cách ghép">
+              <select value={mode} onChange={(e) => setMode(e.target.value as "letters" | "words")}>
+                <option value="letters">Ghép chữ</option><option value="words">Ghép từ</option>
+              </select>
+            </Field>}
+            {questionType === "duoi_hinh_bat_chu" && <>
+              <Field label="Ảnh minh hoạ (JPG, PNG, WEBP · tối đa 5 MB)">
+                <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={(e) => { const file=e.target.files?.[0]; if(file) void uploadPicture(file); e.currentTarget.value=''; }} />
+              </Field>
+              <Field label="Hoặc dán đường dẫn ảnh">
+                <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://..." />
+              </Field>
+              {imageUrl && <figure className="picture-question"><img src={imageUrl.startsWith('http') ? imageUrl : import.meta.env.BASE_URL + imageUrl} alt="Xem trước ảnh câu hỏi" /></figure>}
+            </>}
             <Field label="Đáp án chính">
               <input
                 required
@@ -512,22 +563,22 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
                 onChange={(e) => setAnswer(e.target.value)}
               />
             </Field>
-            <Button
+            {questionType === "vua_tieng_viet" && <Button
               kind="subtle"
               onClick={() =>
                 setTileText(tokens(answer, mode).reverse().join(" / "))
               }
             >
               Tạo bộ ô từ đáp án
-            </Button>
-            <Field label="Bộ chữ / từ (phân cách bằng /)">
+            </Button>}
+            {questionType === "vua_tieng_viet" && <Field label="Bộ chữ / từ (phân cách bằng /)">
               <textarea
                 required
                 value={tileText}
                 onChange={(e) => setTileText(e.target.value)}
               />
-            </Field>
-            <div className="tiles editor-tiles">
+            </Field>}
+            {questionType === "vua_tieng_viet" && <div className="tiles editor-tiles">
               {tileText
                 .split("/")
                 .filter((t) => t.trim())
@@ -536,7 +587,7 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
                     {t.trim()}
                   </span>
                 ))}
-            </div>
+            </div>}
             <div className="two-columns">
               <Field label="Thời gian (5–600 giây)">
                 <input
