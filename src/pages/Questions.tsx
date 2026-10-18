@@ -35,7 +35,11 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
     [bulkDuration, setBulkDuration] = useState(""),
     [bulkPoints, setBulkPoints] = useState(""),
     [bulkBusy, setBulkBusy] = useState(false),
-    [importingPictures, setImportingPictures] = useState(false);
+    [importingPictures, setImportingPictures] = useState(false),
+    [vuaSource, setVuaSource] = useState(""),
+    [pictureSource, setPictureSource] = useState(""),
+    [mixedTitle, setMixedTitle] = useState("Bộ kết hợp – Vua tiếng Việt và Đuổi hình bắt chữ"),
+    [combining, setCombining] = useState(false);
   const [editing, setEditing] = useState<string | null>(null),
     [answer, setAnswer] = useState(""),
     [tileText, setTileText] = useState(""),
@@ -166,6 +170,15 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
     } finally {
       setImportingPictures(false);
     }
+  }
+  async function combineSets() {
+    if (!vuaSource || !pictureSource) { notify("Hãy chọn đủ một bộ Vua Tiếng Việt và một bộ Đuổi hình bắt chữ."); return; }
+    setCombining(true);
+    try {
+      const id = await rpc<string>("combine_question_sets", { p_vua_set: vuaSource, p_picture_set: pictureSource, p_title: mixedTitle.trim() || "Bộ kết hợp" });
+      await loadSets(); setSelected(id);
+      notify("Đã tạo bộ kết hợp. Bạn có thể chọn bộ này khi tạo phòng.");
+    } catch (e) { notify(errorText(e)); } finally { setCombining(false); }
   }
   async function save() {
     setBusy(true);
@@ -411,6 +424,17 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
             {importingPictures ? "Đang tạo 50 câu…" : "Nạp 50 câu Đuổi hình"}
           </Button>
           <small>Ảnh và đáp án đã được ghép đúng thứ tự; đáp án chỉ hiện khi chủ phòng công bố.</small>
+          <hr />
+          <h3>🧩 Tạo bộ kết hợp</h3>
+          <small>Ghép hai bộ của bạn vào một phòng chơi: câu Vua Tiếng Việt trước, tiếp theo là câu Đuổi hình bắt chữ.</small>
+          <Field label="Bộ Vua Tiếng Việt">
+            <select value={vuaSource} onChange={(e) => setVuaSource(e.target.value)}><option value="">Chọn bộ có câu ghép chữ</option>{sets.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}</select>
+          </Field>
+          <Field label="Bộ Đuổi hình bắt chữ">
+            <select value={pictureSource} onChange={(e) => setPictureSource(e.target.value)}><option value="">Chọn bộ có câu hình</option>{sets.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}</select>
+          </Field>
+          <input aria-label="Tên bộ kết hợp" value={mixedTitle} maxLength={150} onChange={(e) => setMixedTitle(e.target.value)} />
+          <Button kind="outline" disabled={combining || !vuaSource || !pictureSource || vuaSource === pictureSource} onClick={() => void combineSets()}><Images size={16} />{combining ? "Đang tạo…" : "Tạo bộ kết hợp"}</Button>
           <Field label="Bộ câu hỏi">
             <select
               value={selected}
