@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Papa from "papaparse";
 import { Plus, Download, Upload, Trash2, Pencil, Copy, Images } from "lucide-react";
 import {
@@ -25,6 +25,8 @@ type Author = {
   explanation: string;
 };
 export default function Questions({ notify }: { notify: (s: string) => void }) {
+  const editorRef = useRef<HTMLDivElement>(null);
+  const answerInputRef = useRef<HTMLInputElement>(null);
   const [sets, setSets] = useState<SetRecord[]>([]),
     [selected, setSelected] = useState(""),
     [questions, setQuestions] = useState<Question[]>([]),
@@ -252,6 +254,12 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
     setAlternatives(a?.alternatives.join(" | ") || "");
     setQuestionType(q.question_type || "vua_tieng_viet");
     setImageUrl(q.image_url || "");
+    // The editor is beside the list on desktop and below it on smaller screens.
+    // Keep the selected question and its form together in the user's viewport.
+    window.requestAnimationFrame(() => {
+      editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      answerInputRef.current?.focus({ preventScroll: true });
+    });
   }
   async function uploadPicture(file: File) {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
@@ -553,10 +561,11 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
             {!filteredQuestions.length && <Empty message={questions.length ? "Không có câu nào khớp bộ lọc." : undefined} />}
           </div>
         </Card>
-        <Card>
-          <span className="eyebrow">TRÌNH BIÊN SOẠN</span>
-          <h2>{editing ? "Chỉnh sửa câu hỏi" : "Thêm một thử thách"}</h2>
-          <form
+        <div ref={editorRef} className="question-editor-anchor">
+          <Card>
+            <span className="eyebrow">TRÌNH BIÊN SOẠN</span>
+            <h2>{editing ? "Chỉnh sửa câu hỏi" : "Thêm một thử thách"}</h2>
+            <form
             onSubmit={(e) => {
               e.preventDefault();
               void save();
@@ -587,6 +596,7 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
             </>}
             <Field label="Đáp án chính">
               <input
+                ref={answerInputRef}
                 required
                 maxLength={500}
                 value={answer}
@@ -661,8 +671,9 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
                 Làm mới
               </Button>
             </div>
-          </form>
-        </Card>
+            </form>
+          </Card>
+        </div>
       </div>
     </>
   );

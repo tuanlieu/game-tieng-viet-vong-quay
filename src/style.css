@@ -1027,14 +1027,19 @@ textarea {
   gap: 22px;
   align-items: start;
 }
-.question-layout > .card {
+.question-layout > .card,
+.question-layout > .question-editor-anchor > .card {
   overflow: visible;
 }
 .question-layout > .card:first-child {
   display: block;
 }
-.question-layout > .card:last-child form {
+.question-layout > .card:last-child form,
+.question-layout > .question-editor-anchor > .card form {
   padding-bottom: 8px;
+}
+.question-editor-anchor {
+  scroll-margin-top: 18px;
 }
 .question-list {
   margin-top: 14px;
