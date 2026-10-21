@@ -54,6 +54,7 @@ import Rooms from "./pages/Rooms";
 import Wheels from "./pages/Wheels";
 import Themes from "./pages/Themes";
 import Studio from "./pages/Studio";
+import Stats from "./pages/Stats";
 import Profile, { UsersAdmin } from "./pages/Profile";
 import { AudioProvider } from "./lib/audio";
 import { AudioButton, AudioSettings } from "./components/AudioControls";
@@ -91,6 +92,7 @@ const navigation: { id: Page; label: string; icon: LucideIcon }[] = [
   { id: "wheels", label: "Vòng quay", icon: Disc3 },
   { id: "themes", label: "Giao diện & Sự kiện", icon: Palette },
   { id: "history", label: "Lịch sử & Thành tích", icon: History },
+  { id: "stats", label: "Thống kê", icon: BarChart3 },
 ];
 function initialTheme() {
   try {
@@ -343,7 +345,6 @@ function AppShell() {
             label: "Thư viện ảnh/âm thanh",
             icon: Monitor,
           },
-          { id: "stats" as Page, label: "Thống kê", icon: BarChart3 },
           { id: "audit" as Page, label: "Nhật ký quản trị", icon: Archive },
           { id: "backup" as Page, label: "Sao lưu & Khôi phục", icon: Archive },
         ]
@@ -815,12 +816,7 @@ function AppShell() {
           {visiblePage === "history" && <HistoryPage notify={setToast} />}
           {visiblePage === "audit" && <AuditPage notify={setToast} />}
           {visiblePage === "backup" && <BackupPage notify={setToast} />}
-          {visiblePage === "stats" && (
-            <Unavailable
-              title="Thống kê"
-              reason="Dashboard phân tích theo thời gian chưa sẵn sàng. Xem bảng điểm trong phòng và lịch sử vòng quay để lấy kết quả đã ghi nhận."
-            />
-          )}
+          {visiblePage === "stats" && <Stats notify={setToast} />}
           {visiblePage === "rewards" && (
             <Unavailable
               title="Kho phần thưởng"
