@@ -26,6 +26,8 @@ import {
   History,
   Monitor,
   CheckCircle2,
+  LayoutGrid,
+  ClipboardPaste,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -51,6 +53,7 @@ import Questions from "./pages/Questions";
 import Rooms from "./pages/Rooms";
 import Wheels from "./pages/Wheels";
 import Themes from "./pages/Themes";
+import Studio from "./pages/Studio";
 import Profile, { UsersAdmin } from "./pages/Profile";
 import { AudioProvider } from "./lib/audio";
 import { AudioButton, AudioSettings } from "./components/AudioControls";
@@ -64,6 +67,7 @@ const sessionGet = (key: string) =>
 type Page =
   | "overview"
   | "questions"
+  | "studio"
   | "rooms"
   | "wheels"
   | "themes"
@@ -81,6 +85,7 @@ type Page =
   | "privacy";
 const navigation: { id: Page; label: string; icon: LucideIcon }[] = [
   { id: "overview", label: "Tổng quan", icon: LayoutDashboard },
+  { id: "studio", label: "Tạo game", icon: LayoutGrid },
   { id: "questions", label: "Bộ câu hỏi", icon: BookOpen },
   { id: "rooms", label: "Phòng chơi", icon: Users },
   { id: "wheels", label: "Vòng quay", icon: Disc3 },
@@ -752,6 +757,7 @@ function AppShell() {
             </>
           )}
           {visiblePage === "login" && <Auth notify={setToast} />}
+          {visiblePage === "studio" && <Studio go={go} />}
           {visiblePage === "questions" && <Questions notify={setToast} />}
           {visiblePage === "rooms" && (
             <Rooms
@@ -861,12 +867,17 @@ function GuestLanding({
         <p>Không cần tài khoản. Nhập mã phòng và tên của bạn để bắt đầu!</p>
         <form onSubmit={(e) => { e.preventDefault(); setBusy(true); setError(""); void onJoin(value).catch((err) => setError(errorText(err))).finally(() => setBusy(false)); }}>
           <label htmlFor="guest-code">Nhập mã phòng hoặc dán link phòng</label>
-          <input id="guest-code" autoFocus required value={value} onChange={(e) => setValue(e.target.value)} placeholder="Ví dụ: A1B2C3D4 hoặc link mời" />
+          <div className="guest-code-input">
+            <input id="guest-code" autoFocus required value={value} onChange={(e) => setValue(e.target.value)} placeholder="Ví dụ: A1B2C3D4 hoặc link mời" />
+            <button type="button" onClick={() => void navigator.clipboard?.readText().then(setValue).catch(() => setError("Trình duyệt chưa cho phép đọc clipboard. Hãy dán mã trực tiếp."))}>
+              <ClipboardPaste size={16} /> Dán mã
+            </button>
+          </div>
           {error && <p className="join-error" role="alert">{error}</p>}
           <Button type="submit" kind="yellow" disabled={busy}><Play size={18} /> {busy ? "Đang kiểm tra…" : "Tham gia"}</Button>
         </form>
       </section>
-      <button className="organiser-link" onClick={onOrganiser}>Dành cho người tổ chức</button>
+      <button className="organiser-link" onClick={onOrganiser}>Dành cho người tổ chức · Tạo game</button>
     </main>
   );
 }
