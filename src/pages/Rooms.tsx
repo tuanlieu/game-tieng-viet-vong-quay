@@ -72,16 +72,22 @@ export default function Rooms({
       return null;
     }
   })();
+  // A fresh invitation must take precedence over a stale room remembered in
+  // this browser. This is particularly important in Zalo/Safari, where an
+  // anonymous session can survive when a user opens a second room link.
+  const invitationCode = location.hash.startsWith("#join=")
+    ? location.hash.slice(6, 14).toUpperCase()
+    : "";
   const [rooms, setRooms] = useState<Room[]>([]),
     [sets, setSets] = useState<SetRecord[]>([]),
     [selected, setSelected] = useState(
-      savedGuest?.roomId || sessionStorage.getItem("game-room-selection") || "",
+      invitationCode
+        ? ""
+        : savedGuest?.roomId || sessionStorage.getItem("game-room-selection") || "",
     ),
     [title, setTitle] = useState(""),
     [setId, setSetId] = useState(""),
-    [code, setCode] = useState(
-      location.hash.startsWith("#join=") ? location.hash.slice(6, 14) : "",
-    ),
+    [code, setCode] = useState(invitationCode),
     [playerName, setPlayerName] = useState(
       savedGuest?.name || sessionStorage.getItem("game-guest-name") || "",
     ),
@@ -121,6 +127,7 @@ export default function Rooms({
   const warnedRunRef = useRef<string | null>(null);
   const resultSoundRunRef = useRef<string | null>(null);
   const submittingRef = useRef(false);
+  const staleRoomRef = useRef<string | null>(null);
   const room = rooms.find((r) => r.id === selected);
   const isOwner = !!userId && !isAnonymous && room?.owner_id === userId;
   const rewardDirty = Boolean(
@@ -131,6 +138,19 @@ export default function Rooms({
   function chooseRoom(nextRoomId: string) {
     if (nextRoomId !== selected && rewardDirty && !confirm("Cấu hình thưởng chưa được lưu. Đổi phòng sẽ bỏ các thay đổi này?")) return;
     setSelected(nextRoomId);
+  }
+  function abandonStaleRoom(error: unknown) {
+    const message = errorText(error);
+    if (!/không còn là người chơi|không có quyền xem phòng|không có quyền\.?/i.test(message))
+      return false;
+    if (staleRoomRef.current !== selected) {
+      staleRoomRef.current = selected;
+      notify("Bạn không còn ở phòng trước đó. Hãy nhập mã để tham gia một phòng khác.");
+    }
+    sessionStorage.removeItem("game-guest-room");
+    sessionStorage.removeItem("game-room-selection");
+    setSelected("");
+    return true;
   }
   async function loadRooms() {
     try {
@@ -188,7 +208,7 @@ export default function Rooms({
           setOffset(Date.parse(state.run.server_now) - (sent + Date.now()) / 2);
         await loadRooms();
       } catch (e) {
-        if (alive) notify(errorText(e));
+        if (alive && !abandonStaleRoom(e)) notify(errorText(e));
       } finally {
         loading = false;
       }
@@ -246,8 +266,11 @@ export default function Rooms({
   useEffect(() => {
     if (!selected || !userId || isOwner) return;
     const touch = () =>
-      void rpc("touch_room_member", { p_room: selected }).catch(() => {
-        /* A removed player must not silently regain access. */
+      void rpc("touch_room_member", { p_room: selected }).catch((error) => {
+        // Stop the heartbeat as soon as the server confirms that this saved
+        // browser session is no longer a member. Retrying would only produce
+        // repeated 400s and can leave the player on an unusable screen.
+        abandonStaleRoom(error);
       });
     touch();
     const timer = setInterval(touch, 20000);
@@ -412,6 +435,8 @@ export default function Rooms({
       );
       sessionStorage.setItem("game-guest-name", playerName.trim());
       setCode("");
+      if (location.hash.startsWith("#join="))
+        history.replaceState({}, document.title, location.pathname + location.search);
     } catch (e) {
       notify(errorText(e));
     }
