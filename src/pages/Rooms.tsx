@@ -114,7 +114,11 @@ export default function Rooms({
     [rewardSpinDuration, setRewardSpinDuration] = useState(10),
     [rewardSaving, setRewardSaving] = useState(false),
     [rewardMessage, setRewardMessage] = useState(""),
-    [rewardMessageError, setRewardMessageError] = useState(false);
+    [rewardMessageError, setRewardMessageError] = useState(false),
+    [manualRecipient, setManualRecipient] = useState(""),
+    [manualQuantity, setManualQuantity] = useState(1),
+    [manualReason, setManualReason] = useState(""),
+    [manualGranting, setManualGranting] = useState(false);
   const [answerPopupRunId, setAnswerPopupRunId] = useState<string | null>(null);
   const [countdownReadyRunId, setCountdownReadyRunId] = useState<string | null>(null);
   const [rewardSpin, setRewardSpin] = useState<{
@@ -593,7 +597,26 @@ export default function Rooms({
       setRewardSaving(false);
     }
   }
-  const canConfigureReward = !run || run.state === "revealed";
+  async function grantManualSpins() {
+    if (!room || !manualRecipient || manualReason.trim().length < 3 || manualGranting) return;
+    setManualGranting(true);
+    try {
+      const result = await rpc<{ quantity: number; already_granted: boolean }>("grant_manual_room_spins", {
+        p_room: room.id,
+        p_recipient: manualRecipient,
+        p_quantity: manualQuantity,
+        p_reason: manualReason.trim(),
+        p_request_id: crypto.randomUUID(),
+      });
+      setManualReason("");
+      notify(result.already_granted ? "Yêu cầu cấp lượt này đã được xử lý." : `Đã cấp ${result.quantity} lượt quay và lưu lịch sử.`);
+    } catch (error) {
+      notify(errorText(error));
+    } finally {
+      setManualGranting(false);
+    }
+  }
+    const canConfigureReward = !run || run.state === "revealed";
   const scores = [...members].sort((a, b) => b.score - a.score || a.display_name.localeCompare(b.display_name));
   return (
     <div className={presentation ? "presentation" : ""}>
@@ -1083,6 +1106,29 @@ export default function Rooms({
                     {rewardSaving ? "Đang lưu…" : "Lưu cấu hình thưởng"}
                   </Button>
                   {rewardMessage && <small className={"config-message " + (rewardMessageError ? "error" : "")}>{rewardMessage}</small>}
+                  <div className="manual-spin-grant">
+                    <strong>Cấp thêm lượt quay</strong>
+                    <small>Chỉ dùng khi bù sự cố hoặc theo quyết định của MC. Lý do được lưu trong lịch sử.</small>
+                    <Field label="Người chơi nhận lượt">
+                      <select value={manualRecipient} disabled={manualGranting} onChange={(e) => setManualRecipient(e.target.value)}>
+                        <option value="">Chọn người chơi</option>
+                        {members.filter((member) => member.user_id !== userId).map((member) => (
+                          <option key={member.user_id} value={member.user_id}>{member.display_name}{member.team_name ? ` · ${member.team_name}` : ""}</option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Số lượt (1–20)">
+                      <input type="number" min="1" max="20" value={manualQuantity} disabled={manualGranting}
+                        onChange={(e) => setManualQuantity(Math.min(20, Math.max(1, Number(e.target.value) || 1)))} />
+                    </Field>
+                    <Field label="Lý do cấp lượt">
+                      <input value={manualReason} maxLength={500} disabled={manualGranting}
+                        onChange={(e) => setManualReason(e.target.value)} placeholder="Ví dụ: bù lượt do mất kết nối" />
+                    </Field>
+                    <Button kind="outline" disabled={!manualRecipient || manualReason.trim().length < 3 || manualGranting} onClick={() => void grantManualSpins()}>
+                      {manualGranting ? "Đang cấp…" : "Cấp lượt quay"}
+                    </Button>
+                  </div>
                   {rewardStatus?.wheel && (
                     <div className="room-reward-stock" aria-live="polite">
                       <strong>Tồn kho phần thưởng trong phòng</strong>
