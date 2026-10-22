@@ -11,6 +11,9 @@ import {
   Eye,
   Download,
   Gift,
+  ShieldCheck,
+  CircleAlert,
+  Wrench,
 } from "lucide-react";
 import {
   Button,
@@ -26,6 +29,7 @@ import {
   rpc,
   listSets,
   download,
+  configured,
   startGuestSession,
   type SetRecord,
   type Room,
@@ -106,7 +110,9 @@ export default function Rooms({
     [offset, setOffset] = useState(0),
     [tick, setTick] = useState(0),
     [busy, setBusy] = useState(false),
-    [presentation, setPresentation] = useState(false);
+    [presentation, setPresentation] = useState(false),
+    [preflightOpen, setPreflightOpen] = useState(false),
+    [incidentsOpen, setIncidentsOpen] = useState(false);
   const [savedThemes, setSavedThemes] = useState<Theme[]>([]),
     [myWheels, setMyWheels] = useState<Wheel[]>([]),
     [rewardWheel, setRewardWheel] = useState(""),
@@ -622,6 +628,25 @@ export default function Rooms({
   }
     const canConfigureReward = !run || run.state === "revealed";
   const scores = [...members].sort((a, b) => b.score - a.score || a.display_name.localeCompare(b.display_name));
+  const selectedQuestion = questions.find((question) => question.id === questionId);
+  const questionProblems = questions.filter((question) =>
+    question.duration < 5 || question.duration > 600 ||
+    (question.question_type === "duoi_hinh_bat_chu" && !question.image_url) ||
+    !question.tiles.length,
+  );
+  const offlineMembers = members.filter((member) => Date.now() - Date.parse(member.last_seen_at) >= 45000);
+  const preflightErrors = [
+    !configured ? "Chưa kết nối được backend Supabase." : "",
+    !questions.length ? "Bộ đề chưa có câu hỏi để phát." : "",
+    questionProblems.length ? `${questionProblems.length} câu thiếu dữ liệu hợp lệ (thời gian, bộ chữ hoặc ảnh).` : "",
+    rewardEnabled && !rewardWheel ? "Đã bật thưởng quay nhưng chưa chọn vòng quay." : "",
+  ].filter(Boolean);
+  const preflightWarnings = [
+    !members.length ? "Chưa có người chơi tham gia phòng." : "",
+    !audio.prefs.enabled ? "Âm thanh đang tắt trên thiết bị này; người chơi vẫn có thể tham gia bình thường." : "",
+    !document.fullscreenEnabled ? "Trình duyệt này không hỗ trợ toàn màn hình trình chiếu." : "",
+    offlineMembers.length ? `${offlineMembers.length} người chơi đang ngoại tuyến.` : "",
+  ].filter(Boolean);
   return (
     <div className={presentation ? "presentation" : ""}>
       <PageTitle
@@ -658,6 +683,47 @@ export default function Rooms({
           </div>
         )}
       </PageTitle>
+      {isOwner && room && !presentation && (
+        <aside className="host-quick-dock" aria-label="Thanh điều hành nhanh">
+          <div className="host-quick-status">
+            <span>ĐIỀU HÀNH NHANH</span>
+            <strong>{run ? `Đang phát: ${run.title || "Câu hỏi hiện tại"}` : selectedQuestion ? `Sẵn sàng: ${selectedQuestion.title || "Câu hỏi đã chọn"}` : "Chưa chọn câu hỏi"}</strong>
+            <small>Đối tượng trả lời: toàn phòng</small>
+          </div>
+          <div className="host-quick-actions">
+            <Button disabled={busy || !questionId || (!!run && run.state !== "revealed")} onClick={() => void control("start")}><Play size={15} /> Phát câu</Button>
+            <Button kind="outline" disabled={busy || !run || !["running", "paused"].includes(run.state)} onClick={() => void control(run?.state === "paused" ? "resume" : "pause")}><Pause size={15} /> {run?.state === "paused" ? "Tiếp tục" : "Tạm dừng"}</Button>
+            <Button kind="outline" disabled={busy || !run || !["running", "paused"].includes(run.state)} onClick={() => void control("end")}><CircleAlert size={15} /> Kết thúc câu</Button>
+            <Button kind="subtle" disabled={busy || !run} onClick={() => void control("reveal")}><Eye size={15} /> Công bố</Button>
+            <Button kind="outline" onClick={() => setPreflightOpen(true)}><ShieldCheck size={15} /> Kiểm tra</Button>
+            <Button kind="outline" onClick={() => setIncidentsOpen(true)}><Wrench size={15} /> Sự cố{offlineMembers.length ? ` (${offlineMembers.length})` : ""}</Button>
+          </div>
+        </aside>
+      )}
+      {preflightOpen && <Modal title="Kiểm tra trước khi bắt đầu" onClose={() => setPreflightOpen(false)}>
+        <p>Kiểm tra dựa trên cấu hình hiện tại của phòng. Kết quả không tự sửa dữ liệu hoặc thay đổi xác suất phần thưởng.</p>
+        <div className="preflight-list">
+          <div className={configured ? "pass" : "fail"}><strong>Backend và quyền chủ phòng</strong><span>{configured && isOwner ? "Đã xác nhận" : "Chưa xác nhận"}</span></div>
+          <div className={questions.length && !questionProblems.length ? "pass" : "fail"}><strong>Câu hỏi, đáp án và thời gian</strong><span>{questions.length && !questionProblems.length ? `${questions.length} câu sẵn sàng` : "Cần chỉnh sửa"}</span></div>
+          <div className={!rewardEnabled || !!rewardWheel ? "pass" : "fail"}><strong>Vòng quay và tồn kho</strong><span>{!rewardEnabled ? "Chưa bật thưởng quay" : rewardWheel ? "Đã chọn vòng quay" : "Thiếu vòng quay"}</span></div>
+          <div className="pass"><strong>Màn hình trình chiếu</strong><span>Chỉ hiển thị trạng thái đã công bố</span></div>
+          <div className={audio.prefs.enabled ? "pass" : "warn"}><strong>Âm thanh</strong><span>{audio.prefs.enabled ? "Đã bật trên thiết bị này" : "Cần thao tác bật âm thanh"}</span></div>
+        </div>
+        {!!preflightErrors.length && <div className="operation-notice danger"><strong>Chưa thể xác nhận sẵn sàng</strong>{preflightErrors.map((message) => <p key={message}>{message}</p>)}</div>}
+        {!!preflightWarnings.length && <div className="operation-notice warning"><strong>Cảnh báo có thể tiếp tục</strong>{preflightWarnings.map((message) => <p key={message}>{message}</p>)}</div>}
+        {!preflightErrors.length && !preflightWarnings.length && <div className="operation-notice success">Các mục kiểm tra tự động đều đạt. Chủ phòng vẫn cần kiểm tra thiết bị âm thanh và trình chiếu thực tế.</div>}
+      </Modal>}
+      {incidentsOpen && <Modal title="Trung tâm xử lý sự cố" onClose={() => setIncidentsOpen(false)}>
+        <p>Không có nút “thử lại” giao dịch phần thưởng. Lượt quay đang xử lý phải chờ backend xác nhận để tránh trao trùng.</p>
+        <div className="incident-list">
+          {offlineMembers.map((member) => <article key={member.user_id}><div><strong>{member.display_name} đang mất kết nối</strong><small>Lần thấy cuối: {new Date(member.last_seen_at).toLocaleTimeString("vi-VN")}</small></div><span>Người chơi có thể tải lại hoặc vào lại bằng mã phòng; điểm cũ vẫn được giữ.</span></article>)}
+          {run?.state === "paused" && <article><div><strong>Câu hỏi đang tạm dừng</strong><small>Thời gian còn lại đã được lưu tại backend.</small></div><Button onClick={() => { setIncidentsOpen(false); void control("resume"); }}>Tiếp tục câu</Button></article>}
+          {run?.state === "running" && left <= 0 && <article><div><strong>Đồng hồ đã hết</strong><small>Đóng câu trước khi công bố hoặc phát câu mới.</small></div><Button onClick={() => { setIncidentsOpen(false); void control("end"); }}>Kết thúc câu</Button></article>}
+          {rewardSpin && <article><div><strong>Lượt quay đang chờ khôi phục</strong><small>Không tạo giao dịch mới. Hệ thống đang chờ mốc kết thúc đã lưu.</small></div><span>Đang xử lý</span></article>}
+          {!offlineMembers.length && run?.state !== "paused" && !(run?.state === "running" && left <= 0) && !rewardSpin && <p className="empty">Chưa phát hiện sự cố cần xử lý trong phòng này.</p>}
+        </div>
+        <Button kind="outline" onClick={() => { setIncidentsOpen(false); document.querySelector(".manual-spin-grant")?.scrollIntoView({ behavior: "smooth", block: "center" }); }}>Cấp lượt quay bù có lịch sử</Button>
+      </Modal>}
       {!presentation && !isAnonymous && userId && !room && (
         <div className="two-columns">
           <Card>

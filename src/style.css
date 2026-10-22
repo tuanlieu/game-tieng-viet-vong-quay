@@ -2234,6 +2234,53 @@ td button {
     font-size: 21px;
   }
 }
+.host-quick-dock {
+  position: sticky;
+  top: 10px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: space-between;
+  margin: 0 0 18px;
+  padding: 13px 15px;
+  border: 1px solid #bddbd6;
+  border-radius: 16px;
+  background: rgba(248, 255, 253, .96);
+  box-shadow: 0 8px 24px rgba(7, 83, 76, .12);
+  backdrop-filter: blur(12px);
+}
+.host-quick-status { min-width: 180px; display: grid; gap: 2px; }
+.host-quick-status span { color: #08746b; font-size: 11px; font-weight: 800; letter-spacing: .09em; }
+.host-quick-status strong { color: #151b45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.host-quick-status small { color: #65717a; }
+.host-quick-actions { display: flex; flex-wrap: wrap; gap: 7px; justify-content: flex-end; }
+.host-quick-actions .button { min-height: 38px; padding: 8px 11px; }
+.preflight-list, .incident-list { display: grid; gap: 10px; margin: 14px 0; }
+.preflight-list > div, .incident-list article {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px; border: 1px solid #dce8e5; border-radius: 12px; background: #fbfefd;
+}
+.preflight-list strong, .incident-list strong { display: block; color: #17204b; }
+.preflight-list span, .incident-list small, .incident-list article > span { color: #64717a; font-size: 13px; }
+.preflight-list .pass { border-left: 4px solid #078675; }
+.preflight-list .warn { border-left: 4px solid #ce8a14; }
+.preflight-list .fail { border-left: 4px solid #bd3b3b; }
+.operation-notice { margin: 12px 0; padding: 11px 13px; border-radius: 11px; font-size: 14px; }
+.operation-notice p { margin: 5px 0 0; }
+.operation-notice.danger { color: #8a2424; background: #fff0f0; }
+.operation-notice.warning { color: #805616; background: #fff8e8; }
+.operation-notice.success { color: #09665d; background: #eaf8f3; }
+.incident-list article > div { min-width: 0; }
+
+@media (max-width: 760px) {
+  .host-quick-dock { display: block; top: 4px; padding: 11px; }
+  .host-quick-status { margin-bottom: 10px; }
+  .host-quick-actions { justify-content: flex-start; }
+  .host-quick-actions .button { font-size: 13px; flex: 1 1 auto; }
+  .preflight-list > div, .incident-list article { align-items: flex-start; flex-direction: column; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *:before,
