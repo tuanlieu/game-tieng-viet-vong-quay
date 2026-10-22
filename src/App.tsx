@@ -28,6 +28,9 @@ import {
   CheckCircle2,
   LayoutGrid,
   ClipboardPaste,
+  Image,
+  Puzzle,
+  Trophy,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -857,6 +860,16 @@ function GuestLanding({
   return (
     <main className="guest-landing">
       <div className="guest-brand"><span>V</span><div><strong>GAME TIẾNG VIỆT</strong><small>VÒNG QUAY MAY MẮN</small></div></div>
+      <section className="guest-game-intro" aria-label="Các trò chơi có trong phòng">
+        <span className="guest-kicker">CHƠI CÙNG NHAU · NHẬN QUÀ</span>
+        <h1>Đoán chữ, đuổi hình, quay thưởng</h1>
+        <p>Đây là trò chơi theo phòng. Người tổ chức tạo phòng, sau đó gửi mã hoặc link mời cho mọi người cùng vào chơi.</p>
+        <div className="guest-game-modes">
+          <article><span className="guest-mode-icon tiles"><b>Đ</b><b>Ố</b><b>N</b></span><strong>Vua Tiếng Việt</strong><small>Ghép chữ thành đáp án</small></article>
+          <article><span className="guest-mode-icon"><Image size={22} /></span><strong>Đuổi hình bắt chữ</strong><small>Quan sát hình và đoán từ</small></article>
+          <article><span className="guest-mode-icon"><Trophy size={22} /></span><strong>Vòng quay may mắn</strong><small>Nhận quà sau lượt chơi</small></article>
+        </div>
+      </section>
       <section className="join-panel">
         <span className="guest-kicker">VÀO CHƠI NGAY</span>
         <h1>Tham gia phòng chơi</h1>
@@ -873,7 +886,7 @@ function GuestLanding({
           <Button type="submit" kind="yellow" disabled={busy}><Play size={18} /> {busy ? "Đang kiểm tra…" : "Tham gia"}</Button>
         </form>
       </section>
-      <button className="organiser-link" onClick={onOrganiser}>Dành cho người tổ chức · Tạo game</button>
+      <button className="organiser-link organiser-cta" onClick={onOrganiser}><Puzzle size={18} /> Dành cho người tổ chức · Tạo game</button>
     </main>
   );
 }
