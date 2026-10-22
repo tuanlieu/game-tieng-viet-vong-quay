@@ -1,0 +1,5 @@
+-- Applied to Supabase production as migration 20261022030646: shared_game_engine_foundation.
+-- This marker preserves the repository migration timeline. The schema is additive and includes
+-- challenges, immutable versions, room rounds/teams/turns, score ledger and spin entitlement history.
+-- Do not execute this marker against a fresh database; obtain the canonical migration from the
+-- production migration history before bootstrapping a new project.
