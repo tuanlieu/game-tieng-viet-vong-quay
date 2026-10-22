@@ -64,7 +64,7 @@ export default function Rooms({
   const audio = useAudio();
   const savedGuest = (() => {
     try {
-      return JSON.parse(sessionStorage.getItem("game-guest-room") || "null") as {
+      return JSON.parse(sessionStorage.getItem("game-guest-room") || localStorage.getItem("game-guest-room") || "null") as {
         roomId?: string;
         name?: string;
       } | null;
@@ -83,7 +83,7 @@ export default function Rooms({
     [selected, setSelected] = useState(
       invitationCode
         ? ""
-        : savedGuest?.roomId || sessionStorage.getItem("game-room-selection") || "",
+        : savedGuest?.roomId || sessionStorage.getItem("game-room-selection") || localStorage.getItem("game-room-selection") || "",
     ),
     [title, setTitle] = useState(""),
     [setId, setSetId] = useState(""),
@@ -156,6 +156,8 @@ export default function Rooms({
     }
     sessionStorage.removeItem("game-guest-room");
     sessionStorage.removeItem("game-room-selection");
+    localStorage.removeItem("game-guest-room");
+    localStorage.removeItem("game-room-selection");
     setSelected("");
     return true;
   }
@@ -284,7 +286,9 @@ export default function Rooms({
     return () => clearInterval(timer);
   }, [selected, userId, isOwner]);
   useEffect(() => {
-    if (selected) sessionStorage.setItem("game-room-selection", selected);
+    if (!selected) return;
+    sessionStorage.setItem("game-room-selection", selected);
+    localStorage.setItem("game-room-selection", selected);
   }, [selected]);
   useEffect(() => {
     const timer = setInterval(() => setTick((n) => n + 1), 250);
@@ -437,11 +441,11 @@ export default function Rooms({
       });
       await loadRooms();
       setSelected(id);
-      sessionStorage.setItem(
-        "game-guest-room",
-        JSON.stringify({ roomId: id, name: playerName.trim() }),
-      );
+      const savedRoom = JSON.stringify({ roomId: id, name: playerName.trim() });
+      sessionStorage.setItem("game-guest-room", savedRoom);
+      localStorage.setItem("game-guest-room", savedRoom);
       sessionStorage.setItem("game-guest-name", playerName.trim());
+      localStorage.setItem("game-guest-name", playerName.trim());
       setCode("");
       if (location.hash.startsWith("#join="))
         history.replaceState({}, document.title, location.pathname + location.search);
