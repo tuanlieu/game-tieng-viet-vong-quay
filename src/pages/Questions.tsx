@@ -102,6 +102,10 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
       .toLocaleLowerCase("vi")
       .includes(search.toLocaleLowerCase("vi")),
   );
+  const draftTiles = tileText.split("/").map((tile) => tile.trim().normalize("NFC")).filter(Boolean);
+  const tileCheck = questionType === "vua_tieng_viet" && answer.trim()
+    ? validateTiles(draftTiles, answer, mode)
+    : null;
   function toggleSelected(id: string) {
     setSelectedIds((ids) => ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
   }
@@ -611,6 +615,13 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
             >
               Tạo bộ ô từ đáp án
             </Button>}
+            {questionType === "vua_tieng_viet" && <Button
+              kind="outline"
+              disabled={!draftTiles.length}
+              onClick={() => setTileText([...draftTiles].sort(() => Math.random() - 0.5).join(" / "))}
+            >
+              Xáo trộn ô chữ
+            </Button>}
             {questionType === "vua_tieng_viet" && <Field label="Bộ chữ / từ (phân cách bằng /)">
               <textarea
                 required
@@ -628,6 +639,8 @@ export default function Questions({ notify }: { notify: (s: string) => void }) {
                   </span>
                 ))}
             </div>}
+            {tileCheck && !tileCheck.valid && <div className="operation-notice warning">Bộ chữ đang chưa khớp đáp án. Thiếu: {tileCheck.missing.join(", ") || "không"}; thừa: {tileCheck.extra.join(", ") || "không"}. Nội dung chỉ được cảnh báo, không tự sửa.</div>}
+            {tileCheck?.valid && <div className="operation-notice success">Bộ chữ đã khớp đáp án theo quy tắc hiện tại.</div>}
             <div className="two-columns">
               <Field label="Thời gian (5–600 giây)">
                 <input
