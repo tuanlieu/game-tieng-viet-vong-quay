@@ -112,7 +112,8 @@ export default function Rooms({
     [busy, setBusy] = useState(false),
     [presentation, setPresentation] = useState(false),
     [preflightOpen, setPreflightOpen] = useState(false),
-    [incidentsOpen, setIncidentsOpen] = useState(false);
+    [incidentsOpen, setIncidentsOpen] = useState(false),
+    [questionQueue, setQuestionQueue] = useState<string[]>([]);
   const [savedThemes, setSavedThemes] = useState<Theme[]>([]),
     [myWheels, setMyWheels] = useState<Wheel[]>([]),
     [rewardWheel, setRewardWheel] = useState(""),
@@ -347,6 +348,22 @@ export default function Rooms({
       });
   }, [room?.set_id, isOwner]);
   useEffect(() => {
+    if (!room || !isOwner) {
+      setQuestionQueue([]);
+      return;
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem(`game-question-queue:${room.id}`) || "[]") as string[];
+      setQuestionQueue([...new Set(saved)]);
+    } catch {
+      setQuestionQueue([]);
+    }
+  }, [room?.id, isOwner]);
+  useEffect(() => {
+    if (!room || !isOwner) return;
+    localStorage.setItem(`game-question-queue:${room.id}`, JSON.stringify(questionQueue));
+  }, [room?.id, isOwner, questionQueue]);
+  useEffect(() => {
     if (!room) return;
     setRewardWheel(room.reward_wheel_id || "");
     setRewardEnabled(Boolean(room.reward_fastest_enabled));
@@ -471,6 +488,7 @@ export default function Rooms({
       const data = await rpc<Run | null>("current_run", { p_room: selected });
       setRun(data);
       if (action === "start" && data) audio.play("questionStart", { volume: 0.9 });
+      if (action === "start") setQuestionQueue((queue) => queue.filter((id) => id !== questionId));
       if (data)
         setOffset(Date.parse(data.server_now) - (sent + Date.now()) / 2);
     } catch (e) {
@@ -629,6 +647,23 @@ export default function Rooms({
     const canConfigureReward = !run || run.state === "revealed";
   const scores = [...members].sort((a, b) => b.score - a.score || a.display_name.localeCompare(b.display_name));
   const selectedQuestion = questions.find((question) => question.id === questionId);
+  const queuedQuestions = questionQueue
+    .map((id) => questions.find((question) => question.id === id))
+    .filter((question): question is Question => Boolean(question));
+  function addSelectedToQueue() {
+    if (!questionId) return;
+    setQuestionQueue((queue) => queue.includes(questionId) ? queue : [...queue, questionId]);
+  }
+  function moveQueuedQuestion(id: string, direction: -1 | 1) {
+    setQuestionQueue((queue) => {
+      const index = queue.indexOf(id);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= queue.length) return queue;
+      const next = [...queue];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }
   const questionProblems = questions.filter((question) =>
     question.duration < 5 || question.duration > 600 ||
     (question.question_type === "duoi_hinh_bat_chu" && !question.image_url) ||
@@ -1213,6 +1248,24 @@ export default function Rooms({
                     </div>
                   )}
                   </div>
+                  <section className="question-queue" aria-label="Hàng chờ câu hỏi">
+                    <div className="question-queue-head">
+                      <div><strong>Hàng chờ câu hỏi</strong><small>Lưu trên thiết bị chủ phòng sau khi tải lại.</small></div>
+                      <Button kind="outline" disabled={!questionId || questionQueue.includes(questionId)} onClick={addSelectedToQueue}>+ Thêm câu đã chọn</Button>
+                    </div>
+                    {queuedQuestions.length ? (
+                      <ol>
+                        {queuedQuestions.map((question, index) => {
+                          const invalid = question.duration < 5 || question.duration > 600 || !question.tiles.length || (question.question_type === "duoi_hinh_bat_chu" && !question.image_url);
+                          return <li key={question.id} className={invalid ? "invalid" : ""}>
+                            <button type="button" onClick={() => setQuestionId(question.id)} title="Chọn làm câu tiếp theo">{index + 1}. {question.title || question.tiles.join(" / ") || "Câu chưa có nội dung"}</button>
+                            {invalid && <small>Thiếu dữ liệu</small>}
+                            <span className="queue-tools"><button type="button" disabled={index === 0} onClick={() => moveQueuedQuestion(question.id, -1)} aria-label="Đưa lên">↑</button><button type="button" disabled={index === queuedQuestions.length - 1} onClick={() => moveQueuedQuestion(question.id, 1)} aria-label="Đưa xuống">↓</button><button type="button" onClick={() => setQuestionQueue((queue) => queue.filter((id) => id !== question.id))} aria-label="Bỏ khỏi hàng chờ">×</button></span>
+                          </li>;
+                        })}
+                      </ol>
+                    ) : <p className="queue-empty">Chưa có câu trong hàng chờ. Chọn câu bên dưới rồi thêm vào để chuẩn bị trước.</p>}
+                  </section>
                   <select
                     aria-label="Chọn câu"
                     value={questionId}
