@@ -143,6 +143,7 @@ export type Room = {
   late_join_enabled: boolean;
   reward_fastest_enabled: boolean;
   reward_wheel_id: string | null;
+  reward_spin_duration_seconds: number;
 };
 export type Run = {
   id: string;
@@ -179,7 +180,7 @@ export type RoomReward = {
   id: string;
   run_id: string;
   winner: string;
-  state: "available" | "spun" | "void";
+  state: "available" | "spinning" | "spun" | "void";
   mine: boolean;
   label: string | null;
   color: string | null;
@@ -202,7 +203,7 @@ export type RewardStatus = {
   } | null;
   history: Array<{
     id: string;
-    state: "available" | "spun" | "void";
+    state: "available" | "spinning" | "spun" | "void";
     label: string | null;
     color: string | null;
     awarded_at: string;
