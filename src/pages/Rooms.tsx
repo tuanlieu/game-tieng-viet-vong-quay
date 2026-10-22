@@ -542,7 +542,7 @@ export default function Rooms({
           ...previous,
           available_count: Math.max(0, previous.available_count - 1),
           wheel: previous.wheel ? {
-            ...previous,
+            ...previous.wheel,
             items: previous.wheel.items.map((item) =>
               item.label === result.label && item.color === result.color && item.remaining !== null
                 ? { ...item, remaining: Math.max(0, item.remaining - 1) }
