@@ -111,6 +111,7 @@ export default function Rooms({
     [myWheels, setMyWheels] = useState<Wheel[]>([]),
     [rewardWheel, setRewardWheel] = useState(""),
     [rewardEnabled, setRewardEnabled] = useState(false),
+    [rewardSpinDuration, setRewardSpinDuration] = useState(10),
     [rewardSaving, setRewardSaving] = useState(false),
     [rewardMessage, setRewardMessage] = useState(""),
     [rewardMessageError, setRewardMessageError] = useState(false);
@@ -121,6 +122,7 @@ export default function Rooms({
     spinning: boolean;
     rotation: number;
     result: { label: string; color: string } | null;
+    endsAt: string;
   } | null>(null);
   const revealedRunRef = useRef<string | null>(null);
   const receivedRunRef = useRef<string | null>(null);
@@ -133,7 +135,8 @@ export default function Rooms({
   const rewardDirty = Boolean(
     isOwner && room &&
       (rewardEnabled !== Boolean(room.reward_fastest_enabled) ||
-        rewardWheel !== (room.reward_wheel_id || "")),
+        rewardWheel !== (room.reward_wheel_id || "") ||
+        rewardSpinDuration !== room.reward_spin_duration_seconds),
   );
   function chooseRoom(nextRoomId: string) {
     if (nextRoomId !== selected && rewardDirty && !confirm("Cấu hình thưởng chưa được lưu. Đổi phòng sẽ bỏ các thay đổi này?")) return;
@@ -333,6 +336,7 @@ export default function Rooms({
     if (!room) return;
     setRewardWheel(room.reward_wheel_id || "");
     setRewardEnabled(Boolean(room.reward_fastest_enabled));
+    setRewardSpinDuration(room.reward_spin_duration_seconds || 10);
     setRewardMessage("");
     setRewardMessageError(false);
   }, [room?.id, room?.reward_wheel_id, room?.reward_fastest_enabled]);
@@ -510,23 +514,24 @@ export default function Rooms({
   async function spinReward(rewardId = availableReward?.id || (roomReward?.mine ? roomReward.id : undefined)) {
     if (!rewardId || rewardSpin) return;
     setBusy(true);
-    setRewardSpin({ rewardId, spinning: true, rotation: 0, result: null });
+    setRewardSpin({ rewardId, spinning: true, rotation: 0, result: null, endsAt: new Date().toISOString() });
     try {
-      const result = await rpc<{ label: string; color: string }>("spin_room_reward", {
-        p_reward: rewardId,
-      });
+      const requestKey = `game-spin-request:${rewardId}`;
+      const requestId = sessionStorage.getItem(requestKey) || crypto.randomUUID();
+      sessionStorage.setItem(requestKey, requestId);
+      const result = await rpc<{ label: string; color: string; ends_at: string; duration_seconds: number }>(
+        "begin_room_reward_spin",
+        { p_reward: rewardId, p_request_id: requestId },
+      );
       const target = rewardWheelItems.findIndex(
         (item) => item.label === result.label && item.color === result.color,
       );
-      const rotation = wheelRotation(
-        target < 0 ? 0 : target,
-        Math.max(1, rewardWheelItems.length),
-      );
+      const rotation = wheelRotation(target < 0 ? 0 : target, Math.max(1, rewardWheelItems.length));
       audio.stop("wheelMusic");
       audio.loop("wheelSpin", "wheelSpin", 0.7);
       window.requestAnimationFrame(() =>
         setRewardSpin((current) => current && current.rewardId === rewardId
-          ? { ...current, rotation }
+          ? { ...current, rotation, endsAt: result.ends_at }
           : current),
       );
       window.setTimeout(() => {
@@ -537,19 +542,24 @@ export default function Rooms({
           ...previous,
           available_count: Math.max(0, previous.available_count - 1),
           wheel: previous.wheel ? {
-            ...previous.wheel,
+            ...previous,
             items: previous.wheel.items.map((item) =>
               item.label === result.label && item.color === result.color && item.remaining !== null
                 ? { ...item, remaining: Math.max(0, item.remaining - 1) }
                 : item,
             ),
           } : null,
-          history: previous.history.map((item) => item.id === rewardId ? { ...item, state: "spun", label: result.label, color: result.color, spun_at: new Date().toISOString() } : item),
+          history: previous.history.map((item) => item.id === rewardId
+            ? { ...item, state: "spun", label: result.label, color: result.color, spun_at: new Date().toISOString() }
+            : item),
         } : previous);
-        setRewardSpin({ rewardId, spinning: false, rotation, result });
+        setRewardSpin({ rewardId, spinning: false, rotation, result, endsAt: result.ends_at });
         setBusy(false);
         notify(`🎉 Bạn đã quay được: ${result.label}`);
-      }, 10000);
+        void rpc("confirm_room_reward_seen", { p_reward: rewardId })
+          .then(() => sessionStorage.removeItem(requestKey))
+          .catch((error) => notify(errorText(error)));
+      }, Math.max(0, Date.parse(result.ends_at) - Date.now()));
     } catch (e) {
       audio.stop("wheelSpin");
       setRewardSpin(null);
@@ -568,11 +578,15 @@ export default function Rooms({
         p_enabled: rewardEnabled,
         p_wheel: rewardEnabled ? rewardWheel || null : null,
       });
+      if (rewardSpinDuration !== room.reward_spin_duration_seconds) {
+        await rpc("set_room_reward_spin_duration", { p_room: room.id, p_seconds: rewardSpinDuration });
+      }
       await loadRooms();
       setRewardMessage("Đã lưu cấu hình thưởng cho các câu tiếp theo.");
     } catch (e) {
       setRewardEnabled(Boolean(room.reward_fastest_enabled));
       setRewardWheel(room.reward_wheel_id || "");
+      setRewardSpinDuration(room.reward_spin_duration_seconds || 10);
       setRewardMessage(errorText(e));
       setRewardMessageError(true);
     } finally {
@@ -1051,6 +1065,11 @@ export default function Rooms({
                       ))}
                     </select>
                   </Field>
+                  <Field label="Thời lượng quay (giây)">
+                    <input type="number" min="2" max="60" value={rewardSpinDuration}
+                      disabled={!canConfigureReward || rewardSaving}
+                      onChange={(e) => setRewardSpinDuration(Math.min(60, Math.max(2, Number(e.target.value) || 2)))} />
+                  </Field>
                   <label className="switch-row">
                     <input
                       type="checkbox"
@@ -1258,7 +1277,7 @@ export default function Rooms({
               </div>
             </div>
             {rewardSpin.spinning ? (
-              <><strong>Vòng quay đang chọn phần thưởng cho bạn…</strong><p>Xin chờ trong 10 giây.</p></>
+              <><strong>Vòng quay đang chọn phần thưởng cho bạn…</strong><p>Kết quả chỉ hiển thị cho bạn khi vòng quay dừng.</p></>
             ) : (
               <div className="reward-spin-result">
                 <small>CHÚC MỪNG BẠN NHẬN ĐƯỢC</small>
