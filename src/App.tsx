@@ -41,6 +41,7 @@ import {
   download,
   consumeAuthCallback,
   startGuestSession,
+  invitationCodeFromHash,
 } from "./lib/api";
 import { themes, type Theme } from "./lib/game";
 import {
@@ -115,7 +116,7 @@ function initialTheme() {
 }
 function AppShell() {
   const [page, setPage] = useState<Page>(
-    location.hash.startsWith("#join=")
+    invitationCodeFromHash(location.hash)
       ? "rooms"
       : ((sessionGet("game-last-page") as Page | null) || "overview"),
   ),
@@ -137,7 +138,7 @@ function AppShell() {
     // The public room screen must remain usable while auth is reconciling.
     [, setAuthReady] = useState(true);
   const [quickCode, setQuickCode] = useState(
-    location.hash.startsWith("#join=") ? location.hash.slice(6, 14) : "",
+    invitationCodeFromHash(location.hash),
   );
   const [quickName, setQuickName] = useState("");
   const effective = eventTheme || baseTheme;
@@ -238,7 +239,15 @@ function AppShell() {
     };
   }, []);
   useEffect(() => {
-    if (location.hash.startsWith("#join=")) setPage("rooms");
+    const syncInvitation = () => {
+      const code = invitationCodeFromHash(location.hash);
+      if (!code) return;
+      setQuickCode(code);
+      setPage("rooms");
+    };
+    syncInvitation();
+    window.addEventListener("hashchange", syncInvitation);
+    return () => window.removeEventListener("hashchange", syncInvitation);
   }, []);
   useEffect(() => {
     const online = () => setConnected(true),

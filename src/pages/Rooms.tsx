@@ -31,6 +31,7 @@ import {
   download,
   configured,
   startGuestSession,
+  invitationCodeFromHash,
   type SetRecord,
   type Room,
   type Run,
@@ -79,9 +80,7 @@ export default function Rooms({
   // A fresh invitation must take precedence over a stale room remembered in
   // this browser. This is particularly important in Zalo/Safari, where an
   // anonymous session can survive when a user opens a second room link.
-  const invitationCode = location.hash.startsWith("#join=")
-    ? location.hash.slice(6, 14).toUpperCase()
-    : "";
+  const invitationCode = invitationCodeFromHash(location.hash);
   const [rooms, setRooms] = useState<Room[]>([]),
     [sets, setSets] = useState<SetRecord[]>([]),
     [selected, setSelected] = useState(
@@ -199,6 +198,16 @@ export default function Rooms({
     }
     void loadRooms();
   }, [userId, isAnonymous]);
+  useEffect(() => {
+    const useFreshInvitation = () => {
+      const freshCode = invitationCodeFromHash(location.hash);
+      if (!freshCode) return;
+      setSelected("");
+      setCode(freshCode);
+    };
+    window.addEventListener("hashchange", useFreshInvitation);
+    return () => window.removeEventListener("hashchange", useFreshInvitation);
+  }, []);
   useEffect(() => {
     if (!selected) {
       setRun(null);

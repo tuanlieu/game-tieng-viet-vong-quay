@@ -39,11 +39,23 @@ export function client() {
  * account: it needs no email or password, but gives the database a safe,
  * per-browser identity so answers and scores cannot overwrite each other.
  */
-export async function startGuestSession(displayName: string) {
+type GuestAuthClient = Pick<ReturnType<typeof client>, "auth">;
+
+/** Extract one valid room code from an invitation hash, without accepting auth fragments. */
+export function invitationCodeFromHash(hash: string) {
+  const match = /^#join=([a-z0-9]{4,8})$/i.exec(hash);
+  return match ? match[1].toUpperCase() : "";
+}
+
+/**
+ * Testable guest-auth flow. The same anonymous session is deliberately reused
+ * after a reload; a browser profile/tab with separate storage receives its own
+ * Supabase identity.
+ */
+export async function establishGuestSession(supabase: GuestAuthClient, displayName: string) {
   const cleanName = displayName.trim();
   if (cleanName.length < 2 || cleanName.length > 30)
     throw new Error("Nhập tên người chơi hoặc tên đội (2–30 ký tự).");
-  const supabase = client();
   // A stale WebView storage lock must not prevent a new player from joining.
   // If the read times out, continue with anonymous sign-in instead.
   try {
@@ -67,6 +79,10 @@ export async function startGuestSession(displayName: string) {
   if (error) throw error;
   if (!data.session) throw new Error("Không thể tạo phiên khách. Hãy thử lại.");
   return data.session;
+}
+
+export async function startGuestSession(displayName: string) {
+  return establishGuestSession(client(), displayName);
 }
 
 /** Store a session returned by OAuth or an email-confirmation link. */
